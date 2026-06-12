@@ -1,0 +1,17 @@
+# Compiled binary
+cubo
+test_moves
+
+# Generated output files
+solution.dot
+saida.png
+*.png
+
+# Build artifacts
+*.o
+*.a
+
+# Editor / OS junk
+.DS_Store
+*.swp
+*~
