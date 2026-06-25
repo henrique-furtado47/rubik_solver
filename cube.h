@@ -41,6 +41,22 @@
 #define NUM_FACELETS 54   /* total de adesivos                                */
 #define NUM_MOVES    12   /* U U' D D' L L' R R' F F' B B'                     */
 
+/* --------------------------------------------------------------------------
+ *  Cores ANSI para deixar a saida do terminal bonita.
+ *  - cubeInitCores() detecta se a saida e um terminal de verdade; se for um
+ *    arquivo/redirecionamento, as cores sao desligadas (para nao "sujar").
+ *  - ansi(codigo) devolve o codigo de cor, ou "" se as cores estao desligadas.
+ * -------------------------------------------------------------------------- */
+#define A_RESET "\033[0m"
+#define A_BOLD  "\033[1m"
+#define A_DIM   "\033[2m"
+#define A_CYAN  "\033[96m"
+#define A_GREEN "\033[92m"
+#define A_YEL   "\033[93m"
+
+void        cubeInitCores(void);
+const char *ansi(const char *codigo);
+
 /* Deslocamentos (offset) de cada face dentro do vetor de 54 posicoes.        */
 #define U_OFF 0
 #define L_OFF 9

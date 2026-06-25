@@ -22,7 +22,21 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 #include "cube.h"
+
+/* Liga/desliga as cores ANSI (1 = ligadas). Veja cubeInitCores(). */
+static int g_cores = 1;
+
+void cubeInitCores(void)
+{
+    g_cores = isatty(fileno(stdout));   /* so colore se a saida for um terminal */
+}
+
+const char *ansi(const char *codigo)
+{
+    return g_cores ? codigo : "";
+}
 
 const char *MOVE_NAMES[NUM_MOVES] = {
     "U", "U'", "D", "D'", "L", "L'", "R", "R'", "F", "F'", "B", "B'"
@@ -188,33 +202,76 @@ int isSolved(const Cube *cube)
 }
 
 /* --------------------------------------------------------------------------
- *  printCube: planificacao do cubo no terminal.
+ *  printCube: planificacao (vista "aberta") do cubo no terminal.
+ *
+ *  Cada adesivo vira um bloco colorido de 3 caracteres ( X ) com a cor de
+ *  fundo correspondente. Quando as cores estao desligadas, imprime so a letra
+ *  entre colchetes, mantendo o alinhamento.
  * -------------------------------------------------------------------------- */
+
+/* corDeFundo: codigo ANSI de cor de FUNDO para cada cor do cubo. */
+static const char *corDeFundo(char c)
+{
+    switch (c) {
+        case 'W': return "\033[107m";        /* branco                         */
+        case 'Y': return "\033[103m";        /* amarelo                        */
+        case 'G': return "\033[42m";         /* verde                          */
+        case 'B': return "\033[44m";         /* azul                           */
+        case 'R': return "\033[41m";         /* vermelho                       */
+        case 'O': return "\033[48;5;208m";   /* laranja (256 cores)            */
+        default:  return "\033[100m";        /* cinza (desconhecido)           */
+    }
+}
+
+/* imprime um adesivo como bloco colorido " X " (ou "[X]" sem cor). */
+static void printCell(char c)
+{
+    if (g_cores)
+        printf("%s\033[30m %c \033[0m", corDeFundo(c), c);  /* fundo + letra preta */
+    else
+        printf("[%c]", c);
+}
+
 static void printFaceRow(const Cube *c, int off, int row)
 {
-    printf("%c %c %c ", c->f[off+row*3], c->f[off+row*3+1], c->f[off+row*3+2]);
+    int k;
+    for (k = 0; k < 3; k++)
+        printCell(c->f[off + row * 3 + k]);
+}
+
+/* indentacao (largura de uma face) para alinhar Cima e Baixo sobre a Frente. */
+static void indentFace(void)
+{
+    if (g_cores) printf("         ");   /* 3 blocos de 3 chars = 9 espacos     */
+    else         printf("         ");   /* 3 blocos "[X]" = 9 espacos          */
 }
 
 void printCube(const Cube *cube)
 {
     int r;
+    const char *sep = " ";   /* espaco entre faces na fileira do meio          */
+
     /* Cima */
     for (r = 0; r < 3; r++) {
-        printf("        ");
+        indentFace();
+        printf(" ");
         printFaceRow(cube, U_OFF, r);
         printf("\n");
     }
+    printf("\n");
     /* Esquerda Frente Direita Tras (lado a lado) */
     for (r = 0; r < 3; r++) {
-        printFaceRow(cube, L_OFF, r);
-        printFaceRow(cube, F_OFF, r);
-        printFaceRow(cube, R_OFF, r);
+        printFaceRow(cube, L_OFF, r); printf("%s", sep);
+        printFaceRow(cube, F_OFF, r); printf("%s", sep);
+        printFaceRow(cube, R_OFF, r); printf("%s", sep);
         printFaceRow(cube, B_OFF, r);
         printf("\n");
     }
+    printf("\n");
     /* Baixo */
     for (r = 0; r < 3; r++) {
-        printf("        ");
+        indentFace();
+        printf(" ");
         printFaceRow(cube, D_OFF, r);
         printf("\n");
     }
