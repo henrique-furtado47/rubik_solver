@@ -149,27 +149,34 @@ void imprimirSolucao(No *solucao)
 
     n = remontarCaminho(solucao, caminho, 128);
 
-    printf("\n=== SOLUCAO ENCONTRADA ===\n");
-    printf("Quantidade de movimentos: %d\n\n", n);
+    printf("\n%s%s== SOLUCAO ENCONTRADA ==%s\n", ansi(A_BOLD), ansi(A_GREEN), ansi(A_RESET));
+    printf("Quantidade de movimentos: %s%d%s\n\n", ansi(A_BOLD), n, ansi(A_RESET));
 
     if (n == 0) {
         printf("O cubo ja estava resolvido!\n");
         return;
     }
 
-    printf("Movimentos: ");
+    printf("Movimentos: %s%s", ansi(A_BOLD), ansi(A_CYAN));
     for (i = 0; i < n; i++)
-        printf("%s%s", MOVE_NAMES[caminho[i]], (i < n - 1) ? " " : "\n");
+        printf("%s%s", MOVE_NAMES[caminho[i]], (i < n - 1) ? " " : "");
+    printf("%s\n", ansi(A_RESET));
 
     /* Desenho do galho da arvore (raiz -> ... -> solucao). */
-    printf("\nGalho da arvore percorrido ate a solucao:\n");
+    printf("\n%sGalho da arvore percorrido ate a solucao:%s\n", ansi(A_DIM), ansi(A_RESET));
     printf("(raiz: cubo embaralhado)\n");
     for (i = 0; i < n; i++) {
         int k;
         for (k = 0; k <= i; k++) printf("  ");
-        printf("|_ %s   (nivel %d)\n", MOVE_NAMES[caminho[i]], i + 1);
+        printf("|_ %s%s%s   %s(nivel %d)%s\n",
+               ansi(A_CYAN), MOVE_NAMES[caminho[i]], ansi(A_RESET),
+               ansi(A_DIM), i + 1, ansi(A_RESET));
     }
     printf("  ");
     for (i = 0; i < n; i++) printf("  ");
-    printf(">> cubo resolvido\n");
+    printf("%s>> cubo resolvido%s\n", ansi(A_GREEN), ansi(A_RESET));
+
+    /* Confirmacao visual: o cubo apos aplicar a solucao (deve estar resolvido). */
+    printf("\n%sCubo resolvido:%s\n\n", ansi(A_BOLD), ansi(A_RESET));
+    printCube(&solucao->estado);
 }
