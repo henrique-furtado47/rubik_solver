@@ -125,12 +125,12 @@ void copyCube(Cube *dst, const Cube *src)
 }
 
 /* --------------------------------------------------------------------------
- *  isValidColors: 54 caracteres e exatamente 9 de cada cor.
+ *  isValidColors: 54 caracteres, 9 de cada cor e 6 centros diferentes.
  * -------------------------------------------------------------------------- */
 int isValidColors(const char *str)
 {
     int counts[256] = {0};
-    int i, len;
+    int i, j, len;
     const char *cores = "YWGBRO";
 
     len = (int) strlen(str);
@@ -148,6 +148,13 @@ int isValidColors(const char *str)
     for (i = 0; i < 6; i++)
         if (counts[(unsigned char) cores[i]] != 9)
             return 0;
+
+    /* Os 6 centros (indice 4 de cada face) devem ser todos diferentes: cada
+     * face tem uma cor propria. Isso tambem rejeita cubos absurdos.           */
+    for (i = 0; i < 6; i++)
+        for (j = i + 1; j < 6; j++)
+            if (str[i * 9 + 4] == str[j * 9 + 4])
+                return 0;
 
     return 1;
 }
@@ -178,132 +185,6 @@ int isSolved(const Cube *cube)
                 return 0;
     }
     return 1;
-}
-
-/* --------------------------------------------------------------------------
- *  isSolvable: testa se o estado e fisicamente possivel.
- *  --------------------------------------------------------------------------
- *  O cubo so pode ser montado fisicamente (logo, resolvido) se respeitar tres
- *  invariantes do grupo de movimentos:
- *    (1) Paridade: a permutacao dos 8 cantos e a dos 12 meios tem a mesma
- *        paridade (par/impar).
- *    (2) Cantos: a soma das orientacoes (torcoes) dos cantos e multiplo de 3.
- *    (3) Arestas: a soma das orientacoes (flips) dos meios e par.
- *
- *  As tabelas abaixo descrevem, para cada uma das 8 pecas de canto e 12 de
- *  aresta, os indices dos seus adesivos. A ordem dos facelets de cada canto
- *  segue uma orientacao geometrica consistente (mesma quiralidade), o que
- *  torna a soma das torcoes invariante modulo 3. Foram validadas testando
- *  20.000 embaralhamentos aleatorios (todos reconhecidos como soluveis) e
- *  estados corrompidos (corretamente reconhecidos como impossiveis).
- * -------------------------------------------------------------------------- */
-
-/* Cantos: [facelet na face Cima/Baixo, lateral 1, lateral 2].                 */
-static const int CORNER_SLOT[8][3] = {
-    {6,11,18},{8,20,27},{2,29,36},{0,38,9},
-    {45,24,17},{47,33,26},{53,42,35},{51,15,44}
-};
-/* Arestas: [facelet primario, secundario]. Para meios das camadas Cima/Baixo
- * o primario e o facelet de Cima/Baixo; para os 4 meios do meio, e o de Frente
- * ou Tras.                                                                     */
-static const int EDGE_SLOT[12][2] = {
-    {7,19},{5,28},{1,37},{3,10},
-    {46,25},{50,34},{52,43},{48,16},
-    {21,14},{23,30},{39,32},{41,12}
-};
-
-/* cor de cada facelet no cubo resolvido (centros W O G R B Y). */
-static const char SOLVED_REF[NUM_FACELETS + 1] =
-    "WWWWWWWWW" "OOOOOOOOO" "GGGGGGGGG" "RRRRRRRRR" "BBBBBBBBB" "YYYYYYYYY";
-
-/* conjunto ordenado de cores de uma peca, para identifica-la. */
-static void colorSetOf(const char *f, const int *idx, int n, char *out)
-{
-    int i, j;
-    for (i = 0; i < n; i++) out[i] = f[idx[i]];
-    for (i = 0; i < n; i++)
-        for (j = i + 1; j < n; j++)
-            if (out[j] < out[i]) { char t = out[i]; out[i] = out[j]; out[j] = t; }
-    out[n] = '\0';
-}
-
-/* paridade de uma permutacao (0 = par, 1 = impar) via contagem de inversoes. */
-static int permParity(const int *p, int n)
-{
-    int i, j, par = 0;
-    for (i = 0; i < n; i++)
-        for (j = i + 1; j < n; j++)
-            if (p[i] > p[j]) par ^= 1;
-    return par;
-}
-
-int isSolvable(const Cube *cube)
-{
-    char cornSets[8][4], edgeSets[12][3], edgeRef[12], s[4];
-    int  cperm[8], eperm[12];
-    int  i, j, ctw = 0, eflip = 0;
-
-    /* pre-calcula os conjuntos de cores e as cores de referencia resolvidos.  */
-    for (i = 0; i < 8;  i++) colorSetOf(SOLVED_REF, CORNER_SLOT[i], 3, cornSets[i]);
-    for (i = 0; i < 12; i++) {
-        colorSetOf(SOLVED_REF, EDGE_SLOT[i], 2, edgeSets[i]);
-        edgeRef[i] = SOLVED_REF[EDGE_SLOT[i][0]];
-    }
-
-    /* CANTOS: identifica a peca em cada slot (perm) e sua torcao (orientacao). */
-    for (i = 0; i < 8; i++) {
-        int found = -1;
-        colorSetOf(cube->f, CORNER_SLOT[i], 3, s);
-        for (j = 0; j < 8; j++)
-            if (strcmp(s, cornSets[j]) == 0) { found = j; break; }
-        if (found < 0) return 0;            /* peca de canto impossivel        */
-        cperm[i] = found;
-        /* torcao = posicao do adesivo W/Y entre os 3 facelets do slot         */
-        { int o = -1;
-          for (j = 0; j < 3; j++) {
-              char x = cube->f[CORNER_SLOT[i][j]];
-              if (x == 'W' || x == 'Y') { o = j; break; }
-          }
-          if (o < 0) return 0;
-          ctw += o;
-        }
-    }
-
-    /* ARESTAS: identifica a peca (perm) e sua orientacao (flip).               */
-    for (i = 0; i < 12; i++) {
-        int found = -1;
-        char s2[3];
-        colorSetOf(cube->f, EDGE_SLOT[i], 2, s2);
-        for (j = 0; j < 12; j++)
-            if (strcmp(s2, edgeSets[j]) == 0) { found = j; break; }
-        if (found < 0) return 0;            /* peca de aresta impossivel        */
-        eperm[i] = found;
-        /* flip = 0 se a cor de referencia da PECA esta no facelet primario     */
-        eflip += (cube->f[EDGE_SLOT[i][0]] == edgeRef[found]) ? 0 : 1;
-    }
-
-    if (permParity(cperm, 8) != permParity(eperm, 12)) return 0;  /* (1)        */
-    if (ctw   % 3 != 0) return 0;                                 /* (2)        */
-    if (eflip % 2 != 0) return 0;                                 /* (3)        */
-    return 1;
-}
-
-/* --------------------------------------------------------------------------
- *  countMismatches: quantos adesivos diferem do centro de sua face.
- *  (Nao conta os 6 centros, que estao sempre "certos".)
- *  Usado pela heuristica admissivel da busca A*.
- * -------------------------------------------------------------------------- */
-int countMismatches(const Cube *cube)
-{
-    int face, i, total = 0;
-    for (face = 0; face < 6; face++) {
-        int base   = face * 9;
-        char centro = cube->f[base + 4];
-        for (i = 0; i < 9; i++)
-            if (i != 4 && cube->f[base + i] != centro)
-                total++;
-    }
-    return total;
 }
 
 /* --------------------------------------------------------------------------

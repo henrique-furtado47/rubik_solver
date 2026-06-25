@@ -82,22 +82,16 @@ void copyCube(Cube *dst, const Cube *src);
  * resultado em 'out'. 'in' e 'out' podem ser ponteiros diferentes.            */
 void applyMove(Cube *out, const Cube *in, int moveIndex);
 
-/* isSolved: retorna 1 se o cubo esta resolvido, 0 caso contrario.             */
+/* isSolved: retorna 1 se o cubo esta resolvido, 0 caso contrario.
+ * Resolvido = cada face com uma unica cor (igual ao seu centro). Esse teste
+ * funciona para qualquer orientacao do cubo, pois compara cada adesivo com o
+ * centro da PROPRIA face (e nao com cores fixas pre-definidas).               */
 int isSolved(const Cube *cube);
 
-/* isSolvable: retorna 1 se o estado e FISICAMENTE possivel (resolvivel).
- * Verifica as tres invariantes do grupo do cubo (paridade da permutacao,
- * orientacao dos cantos modulo 3 e orientacao das arestas modulo 2). Um cubo
- * pode ter 9 de cada cor e ainda assim ser impossivel de montar.              */
-int isSolvable(const Cube *cube);
-
-/* isValidColors: verifica se a string tem 54 caracteres e exatamente 9 de
- * cada uma das 6 cores. Retorna 1 se valida, 0 caso contrario.                */
+/* isValidColors: verifica se a string tem 54 caracteres, exatamente 9 de cada
+ * uma das 6 cores e os 6 centros todos diferentes (uma cor por face).
+ * Retorna 1 se valida, 0 caso contrario.                                      */
 int isValidColors(const char *str);
-
-/* countMismatches: numero de adesivos que NAO batem com o centro de sua face.
- * Usado como heuristica para a busca A*.                                      */
-int countMismatches(const Cube *cube);
 
 /* printCube: imprime o estado do cubo em formato de "planificacao".           */
 void printCube(const Cube *cube);
