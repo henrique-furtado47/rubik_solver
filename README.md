@@ -32,18 +32,56 @@ gcc main.c cube.c solver.c graphviz.c -o cubo
 ## Execução
 
 ```bash
-./cubo entrada.txt          # busca em largura (BFS) — padrão
-./cubo entrada.txt astar    # busca A* (heurística admissível)
+./cubo entrada.csv          # busca em largura (BFS) — padrão
+./cubo entrada.csv astar    # busca A* (heurística admissível)
+./cubo entrada.csv bidir    # BFS bidirecional (alcança cubos mais profundos)
+./cubo scramble 6           # gera um embaralhamento de 6 giros em entrada.csv
 ```
+
+### Qual algoritmo usar?
+
+| Algoritmo | Garante mínimo? | Alcance prático | Memória |
+|---|---|---|---|
+| `bfs` (padrão) | sim | ~7 movimentos | alta |
+| `astar` | sim | ~7 movimentos | menor que BFS |
+| `bidir` | sim | **~11–12 movimentos** | bem menor |
+
+O **BFS bidirecional** cresce duas árvores ao mesmo tempo — uma a partir do
+cubo embaralhado e outra a partir do resolvido — que se encontram no meio.
+Como cada árvore só precisa chegar a ~metade da profundidade, ele resolve
+embaralhamentos bem mais fundos com a mesma memória. É o recomendado para
+cubos reais embaralhados à mão.
 
 ## Formato da entrada
 
-Uma única string com **54 cores** (espaços e quebras de linha são ignorados),
-na ordem de faces **Cima, Esquerda, Frente, Direita, Trás, Baixo**.
+São **54 cores** na ordem de faces **Cima, Esquerda, Frente, Direita, Trás,
+Baixo**. Cores: `Y` amarelo, `W` branco, `G` verde, `B` azul, `R` vermelho,
+`O` laranja.
 
-Cores: `Y` amarelo, `W` branco, `G` verde, `B` azul, `R` vermelho, `O` laranja.
+O leitor aceita **dois formatos** (separadores são sempre ignorados):
 
-Se a string não tiver 54 cores válidas (9 de cada), o programa imprime:
+1. **String única** (`entrada.txt`):
+
+   ```
+   WWRWWRWWWOOOOOGOOGGGGRGGRGGRYYYRRYRRBBBWBBWBBYOOYYBYYB
+   ```
+
+2. **CSV** (`entrada.csv`) — uma face por linha, cores separadas por vírgula.
+   Linhas iniciadas por `#` são **comentários** (ignoradas):
+
+   ```csv
+   # Ordem das faces: Cima, Esquerda, Frente, Direita, Tras, Baixo
+   W,W,R,W,W,R,W,W,W
+   O,O,O,O,O,G,O,O,G
+   G,G,G,R,G,G,R,G,G
+   R,Y,Y,Y,R,R,Y,R,R
+   B,B,B,W,B,B,W,B,B
+   Y,O,O,Y,Y,B,Y,Y,B
+   ```
+
+Rodar com qualquer um: `./cubo entrada.csv` ou `./cubo entrada.txt`.
+
+Se não houver exatamente 54 cores válidas (9 de cada), o programa imprime:
 
 ```
 Estado invalido do cubo.

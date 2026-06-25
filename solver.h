@@ -62,6 +62,13 @@ Node *bfsSolve(Tree *tree, const Cube *start);
  * Tambem retorna o caminho otimo; costuma visitar menos nos que o BFS.        */
 Node *astarSolve(Tree *tree, const Cube *start);
 
+/* biBfsSolve: BFS BIDIRECIONAL. Faz duas buscas em largura simultaneas - uma
+ * a partir do estado inicial e outra a partir do estado resolvido - que se
+ * encontram no meio. Alcanca o DOBRO da profundidade de um BFS comum com a
+ * mesma memoria. Retorna o no-folha de um ramo-solucao (cubo resolvido)
+ * montado na arvore, ou NULL se nao houver encontro dentro dos limites.       */
+Node *biBfsSolve(Tree *tree, const Cube *start);
+
 /* reconstructPath: a partir do no-solucao, percorre os ponteiros 'parent'
  * ate a raiz e preenche 'path' (do raiz ao solucao). Retorna o tamanho.       */
 int reconstructPath(Node *solution, Node **path, int maxLen);

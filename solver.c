@@ -18,8 +18,8 @@
 #include "solver.h"
 
 /* Limites de seguranca para a busca (trabalho academico: scrambles rasos).   */
-#define MAX_DEPTH      9          /* profundidade maxima explorada             */
-#define MAX_NODES      4000000    /* limite de nos alocados                    */
+#define MAX_DEPTH      12         /* profundidade maxima explorada             */
+#define MAX_NODES      100000000    /* limite de nos alocados                    */
 #define HASH_SIZE      (1 << 21)  /* 2.097.152 baldes na tabela hash           */
 
 /* ==========================================================================
@@ -376,6 +376,193 @@ Node *astarSolve(Tree *tree, const Cube *start)
     free(open);
     visitedFree(visited);
     return result;
+}
+
+/* ==========================================================================
+ *  5b. biBfsSolve  -  BFS BIDIRECIONAL
+ *  --------------------------------------------------------------------------
+ *  Ideia: em vez de uma unica arvore crescendo do estado inicial ate a
+ *  solucao (profundidade d, custo ~b^d), crescemos DUAS arvores ao mesmo
+ *  tempo: uma a partir do estado inicial e outra a partir do estado
+ *  resolvido. Quando as duas fronteiras se TOCAM num estado comum, juntamos
+ *  os dois meio-caminhos. Cada arvore cresce so ate ~d/2, e como b^(d/2) e
+ *  muito menor que b^d, alcancamos embaralhamentos bem mais profundos.
+ *
+ *  Para detectar o encontro, cada lado guarda seus estados visitados num
+ *  MAPA estado -> no (NodeMap), e ao gerar um filho consultamos o mapa do
+ *  lado oposto. A solucao final e remontada assim:
+ *     caminho do inicio ate o encontro  +  (caminho do encontro ate o
+ *     resolvido, que e o ramo da arvore-de-tras percorrido ao contrario,
+ *     trocando cada movimento pelo seu inverso).
+ * ========================================================================== */
+
+/* ---- Mapa estado -> Node* (hash com encadeamento) ---- */
+typedef struct MapEntry {
+    Node *node;
+    struct MapEntry *next;
+} MapEntry;
+
+typedef struct { MapEntry **buckets; } NodeMap;
+
+static NodeMap *mapCreate(void)
+{
+    NodeMap *m = (NodeMap *) malloc(sizeof(NodeMap));
+    m->buckets = (MapEntry **) calloc(HASH_SIZE, sizeof(MapEntry *));
+    return m;
+}
+static Node *mapGet(NodeMap *m, const char *s)
+{
+    unsigned long idx = hashState(s) & (HASH_SIZE - 1);
+    MapEntry *e = m->buckets[idx];
+    while (e) { if (strcmp(e->node->state.f, s) == 0) return e->node; e = e->next; }
+    return NULL;
+}
+/* insere se inedito; retorna 1 se inserido, 0 se ja existia */
+static int mapAdd(NodeMap *m, Node *node)
+{
+    unsigned long idx = hashState(node->state.f) & (HASH_SIZE - 1);
+    MapEntry *e = m->buckets[idx];
+    while (e) { if (strcmp(e->node->state.f, node->state.f) == 0) return 0; e = e->next; }
+    e = (MapEntry *) malloc(sizeof(MapEntry));
+    e->node = node;
+    e->next = m->buckets[idx];
+    m->buckets[idx] = e;
+    return 1;
+}
+static void mapFree(NodeMap *m)
+{
+    int i;
+    for (i = 0; i < HASH_SIZE; i++) {
+        MapEntry *e = m->buckets[i];
+        while (e) { MapEntry *n = e->next; free(e); e = n; }
+    }
+    free(m->buckets);
+    free(m);
+}
+
+/* Monta um ramo-solucao LIMPO (do inicio ate o resolvido) a partir do encontro,
+ * e devolve o no-folha. fnode = no de encontro na arvore-da-frente; bnode = no
+ * de encontro na arvore-de-tras (mesmo estado).                              */
+static Node *biReconstruct(Tree *tree, Node *fnode, Node *bnode)
+{
+    int   moves[256], n = 0, i;
+    Node *p, *cur;
+    Cube  st;
+
+    /* (a) movimentos do inicio ate o encontro: sobe ate a raiz e inverte     */
+    {
+        int tmp[128], t = 0;
+        for (p = fnode; p->parent != NULL; p = p->parent) tmp[t++] = p->move;
+        for (i = t - 1; i >= 0; i--) moves[n++] = tmp[i];   /* raiz -> encontro */
+    }
+    /* (b) do encontro ate o resolvido: sobe a arvore-de-tras trocando cada
+     *     movimento pelo seu INVERSO (na ordem em que sobimos).               */
+    for (p = bnode; p->parent != NULL; p = p->parent)
+        moves[n++] = inverseMove(p->move);
+
+    /* (c) constroi um ramo limpo na arvore aplicando a sequencia completa.    */
+    cur = tree->root;
+    copyCube(&st, &tree->root->state);
+    for (i = 0; i < n; i++) {
+        Node *c;
+        applyMove(&st, &st, moves[i]);
+        c = newNode(tree, &st, moves[i], cur->depth + 1, cur);
+        addChild(cur, c);
+        cur = c;
+    }
+    return cur;   /* folha = estado resolvido */
+}
+
+/* Expande UM no de um lado da busca; se algum filho encontrar o lado oposto,
+ * devolve 1 e preenche fOut/bOut com os nos de encontro (frente/tras).        */
+static int biExpand(Tree *tree, Node *node, NodeMap *meu, NodeMap *outro,
+                    Node ***fila, long *tail, long *cap,
+                    Node **fOut, Node **bOut, int ladoFrente)
+{
+    int m;
+    for (m = 0; m < NUM_MOVES; m++) {
+        Cube  child;
+        Node *c, *encontro;
+
+        if (node->move != -1 && m == inverseMove(node->move)) continue;
+        applyMove(&child, &node->state, m);
+        if (mapGet(meu, child.f)) continue;         /* ja visto neste lado     */
+
+        c = newNode(tree, &child, m, node->depth + 1, node);
+        addChild(node, c);
+        mapAdd(meu, c);
+
+        /* (*fila) enfileira */
+        if (*tail == *cap) { *cap *= 2; *fila = (Node **) realloc(*fila, (*cap) * sizeof(Node *)); }
+        (*fila)[(*tail)++] = c;
+
+        /* encontro com o outro lado? */
+        encontro = mapGet(outro, child.f);
+        if (encontro) {
+            if (ladoFrente) { *fOut = c;        *bOut = encontro; }
+            else            { *fOut = encontro; *bOut = c;        }
+            return 1;
+        }
+    }
+    return 0;
+}
+
+Node *biBfsSolve(Tree *tree, const Cube *start)
+{
+    Cube     resolvido;
+    NodeMap *mapF, *mapB;
+    Node   **filaF, **filaB, *rootB, *fMeet = NULL, *bMeet = NULL, *resultado = NULL;
+    long     headF = 0, tailF = 0, capF = 1 << 16;
+    long     headB = 0, tailB = 0, capB = 1 << 16;
+
+    (void) start;
+
+    if (isSolved(&tree->root->state)) return tree->root;
+
+    /* estado resolvido = cada face com a cor do seu centro                    */
+    {
+        int face, i;
+        for (face = 0; face < 6; face++)
+            for (i = 0; i < 9; i++)
+                resolvido.f[face*9 + i] = tree->root->state.f[face*9 + 4];
+        resolvido.f[NUM_FACELETS] = '\0';
+    }
+
+    mapF = mapCreate();
+    mapB = mapCreate();
+    mapAdd(mapF, tree->root);
+
+    rootB = newNode(tree, &resolvido, -1, 0, NULL);
+    mapAdd(mapB, rootB);
+
+    filaF = (Node **) malloc(capF * sizeof(Node *));
+    filaB = (Node **) malloc(capB * sizeof(Node *));
+    filaF[tailF++] = tree->root;
+    filaB[tailB++] = rootB;
+
+    /* Expande sempre o lado com a MENOR fronteira (mais eficiente).           */
+    while (headF < tailF && headB < tailB) {
+        if (tree->count >= MAX_NODES) break;
+
+        if ((tailF - headF) <= (tailB - headB)) {
+            Node *cur = filaF[headF++];
+            if (cur->depth < MAX_DEPTH &&
+                biExpand(tree, cur, mapF, mapB, &filaF, &tailF, &capF, &fMeet, &bMeet, 1))
+                break;
+        } else {
+            Node *cur = filaB[headB++];
+            if (cur->depth < MAX_DEPTH &&
+                biExpand(tree, cur, mapB, mapF, &filaB, &tailB, &capB, &fMeet, &bMeet, 0))
+                break;
+        }
+    }
+
+    if (fMeet && bMeet)
+        resultado = biReconstruct(tree, fMeet, bMeet);
+
+    free(filaF); free(filaB);
+    mapFree(mapF); mapFree(mapB);
+    return resultado;
 }
 
 /* ==========================================================================

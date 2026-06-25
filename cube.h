@@ -85,6 +85,12 @@ void applyMove(Cube *out, const Cube *in, int moveIndex);
 /* isSolved: retorna 1 se o cubo esta resolvido, 0 caso contrario.             */
 int isSolved(const Cube *cube);
 
+/* isSolvable: retorna 1 se o estado e FISICAMENTE possivel (resolvivel).
+ * Verifica as tres invariantes do grupo do cubo (paridade da permutacao,
+ * orientacao dos cantos modulo 3 e orientacao das arestas modulo 2). Um cubo
+ * pode ter 9 de cada cor e ainda assim ser impossivel de montar.              */
+int isSolvable(const Cube *cube);
+
 /* isValidColors: verifica se a string tem 54 caracteres e exatamente 9 de
  * cada uma das 6 cores. Retorna 1 se valida, 0 caso contrario.                */
 int isValidColors(const char *str);

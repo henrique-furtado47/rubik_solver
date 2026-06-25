@@ -13,10 +13,13 @@ cubo: $(OBJ) cube.h solver.h graphviz.h
 	$(CC) $(CFLAGS) $(OBJ) -o cubo
 
 run: cubo
-	./cubo entrada.txt
+	./cubo entrada.csv
 
 astar: cubo
-	./cubo entrada.txt astar
+	./cubo entrada.csv astar
+
+bidir: cubo
+	./cubo entrada.csv bidir
 
 clean:
-	rm -f cubo test_moves solution.dot saida.png
+	rm -f cubo test_moves check verify_tmp solution.dot saida.png

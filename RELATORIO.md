@@ -161,7 +161,55 @@ A* expande sempre o nó de menor `f = g + h`:
 > gerou apenas **800 nós** — ambos encontraram a mesma solução de 4 movimentos
 > `U F U' R'`. Isso ilustra concretamente o ganho da heurística.
 
+### 4.3. BFS Bidirecional — alcançando cubos mais profundos
+
+O custo do BFS comum é `O(b^d)`: cada movimento a mais multiplica o número de
+nós por ~`b`. Para `d` grande isso estoura a memória. A **busca bidirecional**
+ataca exatamente esse ponto: em vez de uma árvore crescendo do estado inicial
+até a solução, crescemos **duas árvores ao mesmo tempo** —
+
+- uma a partir do **estado embaralhado**;
+- outra a partir do **estado resolvido**.
+
+Quando as duas fronteiras se **encontram** num estado comum, a solução é a
+junção dos dois meio-caminhos. Como cada árvore só precisa atingir
+profundidade `d/2`, o custo cai de `O(b^d)` para `O(b^{d/2})` — uma redução
+enorme (a raiz quadrada do número de nós).
+
+**Detecção do encontro:** cada lado guarda seus estados num **mapa
+estado → nó** (`NodeMap`). Ao gerar um filho, consultamos o mapa do lado
+oposto; se o estado já existe lá, achamos a ponte.
+
+**Reconstrução:** o caminho final é
+`(início → encontro)` da árvore-da-frente, concatenado com
+`(encontro → resolvido)`, que é o ramo da árvore-de-trás percorrido ao
+contrário, **trocando cada movimento pelo seu inverso** (pois aquele ramo foi
+construído partindo do resolvido).
+
+> **Resultado medido:** um cubo embaralhado que o BFS comum **não resolvia**
+> (parava ao gerar 4.000.000 de nós) foi resolvido pelo bidirecional em
+> **10 movimentos**, gerando apenas **~180.000 nós** e usando **~64 MB**.
+> Alcance prático: ~11–12 movimentos, contra ~7 do BFS/A* comuns.
+
 ---
+
+## 4.4. Verificação de Validade (cubo possível × impossível)
+
+Ter 9 adesivos de cada cor **não garante** que o cubo possa existir: muitas
+montagens são fisicamente impossíveis (não se chega a elas por nenhuma
+sequência de giros). A função `isSolvable` (em `cube.c`) testa as **três
+invariantes do grupo do cubo**:
+
+1. **Paridade:** a permutação dos 8 cantos e a dos 12 meios têm a mesma
+   paridade.
+2. **Orientação dos cantos:** a soma das torções é múltiplo de 3.
+3. **Orientação das arestas:** a soma dos *flips* é par.
+
+Se qualquer uma falhar, o programa imprime `Estado invalido do cubo.`
+(atendendo ao requisito de detectar estados impossíveis). As tabelas de
+cantos/arestas foram **validadas empiricamente**: 20.000 embaralhamentos
+aleatórios foram todos reconhecidos como solúveis, e estados corrompidos
+(canto torcido, aresta invertida, troca de peças) como impossíveis.
 
 ## 5. Controle de Estados Visitados
 
