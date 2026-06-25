@@ -15,3 +15,5 @@ saida.png
 .DS_Store
 *.swp
 *~
+
+/.vscode
