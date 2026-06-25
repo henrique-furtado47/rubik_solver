@@ -1,317 +1,247 @@
-# Relatório Técnico — Solucionador de Cubo Mágico 3×3 com Árvores
+# Relatório Técnico — Solucionador de Cubo Mágico 3×3 com Árvore de Estados
 
-**Disciplina:** Estrutura de Dados — Árvores e Grafos
-**Linguagem:** C puro (padrão C90/C99, compilável com `gcc`)
+Trabalho de Estrutura de Dados — tema **Árvores**. Linguagem **C puro**.
 
 ---
 
 ## 1. Objetivo
 
-Demonstrar, na prática, o uso de **árvores** como estrutura de dados para
-resolver um problema de busca em espaço de estados: encontrar a sequência de
-movimentos que leva um Cubo Mágico 3×3 embaralhado de volta ao estado
-resolvido.
+Ler as cores de um cubo mágico 3×3, e usando uma **estrutura de árvore**,
+calcular e exibir:
 
-Cada **estado** do cubo é um nó; cada **movimento** (giro de uma face) cria um
-nó filho. O conjunto de todos esses nós e ligações forma a **árvore de busca**.
+- a **quantidade** de movimentos necessários para resolver o cubo;
+- a **sequência** de movimentos da solução.
 
----
-
-## 2. Estruturas de Dados Utilizadas
-
-### 2.1. `Cube` — o estado do cubo (`cube.h`)
-
-```c
-typedef struct {
-    char f[NUM_FACELETS + 1];   /* 54 cores + '\0' */
-} Cube;
-```
-
-O cubo é representado pelo **modelo de adesivos (facelets)**: um vetor de 54
-caracteres, um por adesivo. Guardar como string traz três vantagens diretas:
-
-- **comparar** estados é `strcmp`;
-- **copiar** estados é `memcpy`/`strcpy`;
-- **calcular o hash** (controle de visitados) é trivial sobre a string.
-
-A ordem das faces no vetor é `U L F R B D` (Cima, Esquerda, Frente, Direita,
-Trás, Baixo), conforme o enunciado, com 9 adesivos por face numerados:
-
-```
-0 1 2
-3 4 5
-6 7 8
-```
-
-O adesivo central (índice 4) de cada face nunca se move e define a cor
-"verdadeira" daquela face.
-
-### 2.2. `Node` — nó da árvore (`solver.h`)
-
-```c
-typedef struct Node {
-    Cube          state;        /* estado completo do cubo            */
-    int           move;         /* movimento que gerou o nó (-1=raiz) */
-    int           depth;        /* profundidade = nº de movimentos    */
-    struct Node  *parent;       /* ponteiro para o pai                */
-    struct Node **children;     /* vetor dinâmico de filhos           */
-    int           numChildren;  /* nº de filhos criados               */
-    int           g, h, f;      /* custos da busca A* (f = g + h)     */
-} Node;
-```
-
-É o tipo central do trabalho. Cada nó:
-
-- **armazena o estado completo** do cubo (`state`);
-- **sabe qual movimento** o originou (`move`) e em **qual profundidade** está
-  (`depth`);
-- aponta para o **pai** (`parent`) — isso permite **reconstruir o caminho** da
-  solução subindo até a raiz;
-- mantém uma **lista de filhos** (`children`), um vetor que cresce com
-  `realloc` à medida que o nó é expandido;
-- guarda `g`, `h` e `f` para a busca **A\***.
-
-### 2.3. `Tree` — a árvore (`solver.h`)
-
-```c
-typedef struct {
-    Node  *root;        /* raiz = estado inicial            */
-    Node **allNodes;    /* repositório de todos os nós       */
-    int    count;       /* nº de nós alocados                */
-    int    capacity;    /* capacidade do vetor allNodes      */
-} Tree;
-```
-
-Além da `root`, a árvore mantém um **vetor com todos os nós alocados**. Isso
-não é obrigatório para a busca, mas torna a **liberação de memória** (`free`)
-simples e segura: ao final, percorremos `allNodes` uma única vez liberando cada
-nó e seu vetor de filhos.
-
-### 2.4. Tabela hash de estados visitados (`solver.c`)
-
-```c
-typedef struct HashEntry {
-    char state[NUM_FACELETS + 1];
-    struct HashEntry *next;     /* encadeamento separado */
-} HashEntry;
-```
-
-Hash com **encadeamento separado** (cada balde é uma lista ligada). A chave é a
-string de 54 cores e a função de espalhamento é a **djb2**. Serve para
-**evitar estados repetidos** (ver seção 5).
-
-### 2.5. Estruturas auxiliares de busca
-
-- **Fila (FIFO)** para o BFS: vetor dinâmico com índices `head`/`tail`.
-- **Heap binário de mínimo** para o A*: vetor onde o pai do índice `i` é
-  `(i-1)/2`, ordenado por `f`. `heapPush`/`heapPop` em O(log n).
+A entrada é digitada ou redirecionada de um arquivo texto, na ordem de faces:
+**Cima, Esquerda, Frente, Direita, Trás, Baixo**.
 
 ---
 
-## 3. Como a Árvore é Construída
+## 2. Representação do cubo (modelo *facelet*)
 
-1. A árvore nasce com **um único nó raiz**, contendo o estado inicial informado
-   pelo usuário (`createTree`).
-2. A busca retira um nó e o **expande** (`generateChildren`): para cada um dos
-   12 movimentos possíveis (`U U' D D' L L' R R' F F' B B'`), calcula o estado
-   resultante com `applyMove`.
-3. Cada estado novo (não visitado) vira um **nó filho**, ligado ao pai por
-   ponteiro, e é registrado na árvore.
-4. O processo se repete sobre os filhos, **expandindo a árvore em níveis**, até
-   encontrar um nó cujo estado esteja resolvido (`isSolved`).
+O cubo tem 6 faces × 9 adesivos = **54 adesivos**. Guardamos os 54 numa string
+de caracteres (`Cube.f` em [cube.h](cube.h)), onde cada caractere é a cor de um
+adesivo. As cores são `Y W G B R O`.
 
-### Como os nós são expandidos
+A ordem das faces no vetor segue o enunciado:
 
-A expansão de um nó está em `generateChildrenInternal`. Para cada movimento,
-aplicamos duas **podas** (otimizações que mantêm a corretude):
-
-- **Poda 1 — não desfazer o último movimento:** se o nó foi gerado por `R`, não
-  geramos `R'` a partir dele (desfazer nunca encurta a solução).
-- **Poda 2 — estados repetidos:** se o estado resultante já está na tabela
-  hash, ele é descartado.
-
-Os movimentos são implementados como **permutações de adesivos**. Cada giro de
-90° é descrito por ciclos `(a b c d)` ("o conteúdo de `a` vai para `b`…"),
-derivados de um modelo geométrico 3D do cubo e **validados por teste
-automático** (aplicar qualquer movimento 4 vezes retorna ao estado original;
-um movimento seguido de seu inverso também).
-
----
-
-## 4. Algoritmos de Busca
-
-### 4.1. BFS — Busca em Largura (padrão)
-
-Explora a árvore **nível a nível**: todos os estados a 1 movimento, depois a 2,
-etc. Como avança por profundidade crescente, **o primeiro estado resolvido
-encontrado está no menor número de movimentos possível** (solução ótima). Usa
-uma **fila FIFO**.
-
-### 4.2. A* — Best-First com heurística
-
-A* expande sempre o nó de menor `f = g + h`:
-
-- `g` = profundidade (movimentos já feitos);
-- `h` = **heurística admissível**: como um giro reposiciona no máximo 20
-  adesivos, usamos `h = teto(adesivos_fora_do_lugar / 20)`. Por **nunca
-  superestimar** o custo restante, A* continua encontrando a solução **ótima**,
-  porém visitando **muito menos nós** que o BFS.
-
-> **Resultado medido** no exemplo (`R U F' U'`): BFS gerou **17.065 nós**; A*
-> gerou apenas **800 nós** — ambos encontraram a mesma solução de 4 movimentos
-> `U F U' R'`. Isso ilustra concretamente o ganho da heurística.
-
-### 4.3. BFS Bidirecional — alcançando cubos mais profundos
-
-O custo do BFS comum é `O(b^d)`: cada movimento a mais multiplica o número de
-nós por ~`b`. Para `d` grande isso estoura a memória. A **busca bidirecional**
-ataca exatamente esse ponto: em vez de uma árvore crescendo do estado inicial
-até a solução, crescemos **duas árvores ao mesmo tempo** —
-
-- uma a partir do **estado embaralhado**;
-- outra a partir do **estado resolvido**.
-
-Quando as duas fronteiras se **encontram** num estado comum, a solução é a
-junção dos dois meio-caminhos. Como cada árvore só precisa atingir
-profundidade `d/2`, o custo cai de `O(b^d)` para `O(b^{d/2})` — uma redução
-enorme (a raiz quadrada do número de nós).
-
-**Detecção do encontro:** cada lado guarda seus estados num **mapa
-estado → nó** (`NodeMap`). Ao gerar um filho, consultamos o mapa do lado
-oposto; se o estado já existe lá, achamos a ponte.
-
-**Reconstrução:** o caminho final é
-`(início → encontro)` da árvore-da-frente, concatenado com
-`(encontro → resolvido)`, que é o ramo da árvore-de-trás percorrido ao
-contrário, **trocando cada movimento pelo seu inverso** (pois aquele ramo foi
-construído partindo do resolvido).
-
-> **Resultado medido:** um cubo embaralhado que o BFS comum **não resolvia**
-> (parava ao gerar 4.000.000 de nós) foi resolvido pelo bidirecional em
-> **10 movimentos**, gerando apenas **~180.000 nós** e usando **~64 MB**.
-> Alcance prático: ~11–12 movimentos, contra ~7 do BFS/A* comuns.
-
----
-
-## 4.4. Verificação de Validade (cubo possível × impossível)
-
-Ter 9 adesivos de cada cor **não garante** que o cubo possa existir: muitas
-montagens são fisicamente impossíveis (não se chega a elas por nenhuma
-sequência de giros). A função `isSolvable` (em `cube.c`) testa as **três
-invariantes do grupo do cubo**:
-
-1. **Paridade:** a permutação dos 8 cantos e a dos 12 meios têm a mesma
-   paridade.
-2. **Orientação dos cantos:** a soma das torções é múltiplo de 3.
-3. **Orientação das arestas:** a soma dos *flips* é par.
-
-Se qualquer uma falhar, o programa imprime `Estado invalido do cubo.`
-(atendendo ao requisito de detectar estados impossíveis). As tabelas de
-cantos/arestas foram **validadas empiricamente**: 20.000 embaralhamentos
-aleatórios foram todos reconhecidos como solúveis, e estados corrompidos
-(canto torcido, aresta invertida, troca de peças) como impossíveis.
-
-## 5. Controle de Estados Visitados
-
-O mesmo estado pode ser alcançado por caminhos diferentes (ex.: `R U` e outra
-sequência podem coincidir). Sem controle, a árvore exploraria estados repetidos
-indefinidamente. A **tabela hash** registra cada estado já gerado: um filho só é
-criado se seu estado for inédito (`visitedCheckAndAdd` retorna 0). É isso que
-mantém a busca finita e eficiente.
-
----
-
-## 6. Reconstrução do Caminho
-
-Quando a solução é encontrada, temos apenas o **nó folha**. Para obter a
-sequência de movimentos, `reconstructPath` sobe pelos ponteiros `parent` até a
-raiz, empilhando os nós, e depois **inverte a ordem** (raiz → solução). Os
-campos `move` de cada nó do caminho formam a sequência de movimentos.
-
----
-
-## 7. Análise de Complexidade
-
-Seja `b` o fator de ramificação (≈ 12 movimentos, ~11 após a poda de não
-desfazer) e `d` a profundidade da solução (número de movimentos).
-
-### Complexidade Temporal
-
-- **BFS:** `O(b^d)` no pior caso — explora todos os nós até o nível `d`.
-  Com a tabela hash, o número real de nós é limitado pela quantidade de
-  **estados distintos** alcançáveis em até `d` movimentos.
-- **A\*:** também `O(b^d)` no pior caso, mas a heurística admissível **poda
-  fortemente** a busca na prática (no exemplo, ~21× menos nós).
-
-### Complexidade Espacial
-
-- **BFS:** `O(b^d)` — precisa guardar todos os nós da fronteira e os visitados.
-  Este é o gargalo do BFS (consome muita memória em profundidades grandes).
-- **A\*:** `O(b^d)` no pior caso (mantém abertos + visitados), mas tipicamente
-  bem menor pela poda heurística.
-
-Por isso o programa define limites de segurança (`MAX_DEPTH`, `MAX_NODES`):
-o espaço de estados do cubo é gigantesco (≈ 4,3×10¹⁹ estados) e o número de
-Deus é 20, de modo que embaralhamentos profundos são inviáveis por busca cega.
-Para um **trabalho de Estrutura de Dados**, o foco é demonstrar a árvore e a
-busca em embaralhamentos rasos (até ~7 movimentos), o que os algoritmos
-resolvem rapidamente.
-
----
-
-## 8. Por que uma Árvore? Diferença entre Árvore e Grafo neste Problema
-
-### Por que árvore foi utilizada
-
-O problema é naturalmente **hierárquico**: partimos de um estado raiz e, a cada
-movimento, geramos novos estados "filhos". Essa relação **pai → filhos** é
-exatamente uma **árvore de busca**:
-
-- a **raiz** é o estado inicial;
-- cada **aresta** é um movimento;
-- cada **caminho** da raiz a um nó é uma sequência de movimentos;
-- o **ponteiro para o pai** permite reconstruir a solução trivialmente.
-
-A árvore expressa de forma direta "qual movimento levou a qual estado",
-que é o que precisamos relatar ao usuário.
-
-### Árvore × Grafo
-
-O **espaço de estados do cubo é, na verdade, um GRAFO**: um mesmo estado pode
-ser alcançado por várias sequências de movimentos diferentes (há ciclos — por
-exemplo, aplicar um movimento 4 vezes volta ao mesmo estado). Num grafo, um
-"nó" (estado) pode ter **vários pais**.
-
-Neste trabalho impomos uma **estrutura de árvore sobre esse grafo**: ao usar a
-**tabela hash de visitados**, aceitamos cada estado **uma única vez** e
-ignoramos as arestas que reencontrariam um estado já visto. O resultado é a
-**árvore de busca** (uma *spanning tree* do grafo de estados a partir da raiz):
-cada estado tem exatamente **um** pai — o caminho pelo qual foi descoberto.
-
-Resumindo:
-
-| Aspecto | Grafo de estados (real) | Árvore de busca (usada) |
-|---|---|---|
-| Pais por nó | vários | exatamente um |
-| Ciclos | sim | não (eliminados pela hash) |
-| Caminho raiz→nó | muitos | único |
-| Estrutura em memória | lista de adjacências | nós com `parent` + `children` |
-
-Ou seja: a árvore é a **visão de busca** que extraímos do grafo de estados, e é
-o que torna a reconstrução do caminho e a visualização (ASCII e Graphviz)
-simples e inequívocas.
-
----
-
-## 9. Organização dos Arquivos
-
-| Arquivo | Responsabilidade |
+| Índices | Face |
 |---|---|
-| `cube.h` / `cube.c` | estrutura `Cube`, movimentos, `initCube`, `applyMove`, `copyCube`, `isSolved`, validação |
-| `solver.h` / `solver.c` | `Node`, `Tree`, hash de visitados, `generateChildren`, `bfsSolve`, `astarSolve`, reconstrução do caminho, `printSolution` |
-| `graphviz.h` / `graphviz.c` | `exportGraphviz` (arquivo `.dot`) |
-| `main.c` | leitura/validação da entrada, orquestração e saída |
+| 0–8   | Cima (U) |
+| 9–17  | Esquerda (L) |
+| 18–26 | Frente (F) |
+| 27–35 | Direita (R) |
+| 36–44 | Trás (B) |
+| 45–53 | Baixo (D) |
 
-Funções exigidas pelo enunciado, todas presentes: `initCube`, `applyMove`,
-`copyCube`, `isSolved`, `generateChildren`, `bfsSolve`, `printSolution`,
-`exportGraphviz` (+ `astarSolve` e `reconstructPath`).
+Dentro de cada face os 9 adesivos vão de 0 a 8 em linhas (esquerda→direita,
+cima→baixo). O adesivo central (índice 4) **nunca se move**: ele define a cor
+da face. O cubo está **resolvido** quando, em cada face, os 9 adesivos são
+iguais ao seu centro — teste feito por `isSolved()`. Como comparamos cada
+adesivo com o **próprio** centro, o teste funciona em qualquer orientação do
+cubo.
+
+Usar uma string facilita **copiar** estados (`copyCube`) e **comparar** se um
+estado está resolvido — operações que a busca faz o tempo todo.
+
+---
+
+## 3. Os 12 movimentos
+
+Os movimentos básicos são giros de 90° das faces: `U U' D D' L L' R R' F F' B B'`
+(horário e anti-horário de cada face). Cada giro é uma **permutação** dos 54
+adesivos, descrita por **ciclos** em [cube.c](cube.c).
+
+Um ciclo `(a b c d)` significa: a cor de `a` vai para `b`, a de `b` para `c`, a
+de `c` para `d` e a de `d` volta para `a`. Cada movimento tem 5 ciclos (2 giram
+os adesivos da própria face, 3 movem os das faces vizinhas). Em `initMoves()`
+montamos, a partir dos ciclos, uma **tabela de permutação** `perm[54]` por
+movimento, e `applyMove()` aplica em O(54): `novo[i] = antigo[perm[i]]`.
+
+Validação informal: aplicar o mesmo movimento 4 vezes volta ao estado original.
+
+---
+
+## 4. A árvore de estados (o coração do trabalho)
+
+A ideia central:
+
+- A **raiz** da árvore é o estado embaralhado lido da entrada.
+- A partir de um estado podemos aplicar 12 movimentos; cada um leva a um novo
+  estado. Esses são os (até) **12 filhos** daquele nó.
+- Repetindo, formamos uma árvore que cresce a cada nível.
+- Uma **folha de sucesso** é um nó cujo estado está resolvido. A sequência de
+  movimentos da raiz até esse nó é a **solução**.
+
+A struct do nó ([solver.h](solver.h)) é simples e direta:
+
+```c
+typedef struct No {
+    Cube        estado;        /* estado completo do cubo neste nó            */
+    int         movimento;     /* movimento (0..11) que gerou o nó; -1 = raiz */
+    int         profundidade;  /* movimentos desde a raiz                     */
+    struct No  *pai;           /* ponteiro para o nó pai                      */
+} No;
+```
+
+O ponteiro `pai` é o que torna isto uma **árvore** explícita: a partir de
+qualquer nó conseguimos subir até a raiz, e é assim que remontamos a solução.
+
+---
+
+## 5. Percurso: busca em profundidade + aprofundamento iterativo
+
+Percorremos a árvore por **busca em profundidade (DFS) recursiva**. A própria
+recursão desce por um galho; quando o galho não leva à solução, ela "volta"
+(*backtracking*) e tenta o próximo movimento. Em pseudocódigo
+(`buscaProfundidade` em [solver.c](solver.c)):
+
+```
+buscaProfundidade(no, limite):
+    se no.estado está resolvido:  retorne no          # achou!
+    se no.profundidade == limite: retorne NULL        # não pode descer mais
+    para cada movimento m (0..11):
+        se m desfaz o último movimento: pule           # poda
+        filho = aplica m em no
+        r = buscaProfundidade(filho, limite)
+        se r != NULL: retorne r                        # solução neste galho
+        libere filho                                   # backtracking
+    retorne NULL
+```
+
+DFS pura tem um problema: ela pode achar uma solução longa antes de uma curta.
+Como o enunciado pede a **quantidade** (mínima) de movimentos, usamos
+**aprofundamento iterativo** (`resolver` em [solver.c](solver.c)): rodamos a
+DFS com limite 0, depois 1, depois 2, … até `PROF_MAXIMA`. Como os limites
+crescem, **a primeira solução encontrada é a mais curta**.
+
+```
+resolver(inicial, profMax):
+    para limite = 0 até profMax:
+        raiz = nó(inicial)
+        sol = buscaProfundidade(raiz, limite)
+        se sol != NULL: retorne sol
+    retorne NULL                 # não resolvível dentro de profMax
+```
+
+### Poda
+
+A única poda é **não desfazer o movimento que acabou de ser feito** (fazer `R`
+e logo `R'` só voltaria ao nó pai). Isso reduz o fator de ramificação de 12
+para ~11 sem perder nenhuma solução.
+
+---
+
+## 6. Reconstrução do caminho
+
+Achado o nó-solução, `remontarCaminho()` sobe pelos ponteiros `pai` coletando
+os movimentos e inverte a lista (para dar a ordem raiz→solução).
+`imprimirSolucao()` então mostra a quantidade de movimentos, a sequência e um
+desenho em ASCII do galho percorrido.
+
+---
+
+## 7. Validação da entrada
+
+`isValidColors()` aceita a entrada se:
+
+1. tem exatamente 54 caracteres, todos em `Y W G B R O`;
+2. há **9 de cada** cor;
+3. os **6 centros** (índice 4 de cada face) são todos **diferentes**.
+
+Optamos por uma validação simples e explicável. Não verificamos a
+"resolubilidade física" do cubo por teoria de grupos: se o cubo for válido em
+cores mas impossível de montar, a busca simplesmente não acha solução dentro do
+limite e o programa avisa.
+
+---
+
+## 8. Complexidade
+
+Seja `b` o fator de ramificação (~11 após a poda) e `d` a profundidade da
+solução.
+
+- **Tempo:** O(b^d). A árvore cresce ~12× por nível. Medições reais: ~18 mil
+  nós para d=4; ~25 milhões para d=7.
+- **Memória:** O(d). Como liberamos cada galho ao desistir dele, só ficam vivos
+  os nós do caminho atual — proporcional à **profundidade**, não ao tamanho da
+  árvore. Essa é a grande vantagem da DFS sobre a busca em largura aqui.
+
+O aprofundamento iterativo refaz os níveis rasos a cada iteração, mas como o
+último nível domina a contagem (cresce exponencialmente), o custo extra é
+pequeno.
+
+---
+
+## 9. Limite prático da busca em árvore
+
+Este é um ponto importante e honesto do trabalho. O número de Deus do cubo 3×3
+é **20**: existem embaralhamentos que exigem 20 movimentos. Mas uma busca em
+árvore com b≈11 chega a, na prática, ~7 movimentos em tempo razoável (acima
+disso o número de estados explode: 11²⁰ ≈ 10²⁰).
+
+Logo, **esta abordagem resolve apenas cubos pouco embaralhados** (até ~7
+giros). Um cubo totalmente embaralhado à mão **não** é resolvível por busca em
+árvore em tempo viável — resolvê-lo exigiria um algoritmo de outra natureza
+(método das camadas, Kociemba etc.), que não usa árvore de busca. Quando a
+solução não cabe no limite, o programa informa isso claramente, em vez de
+travar.
+
+Para demonstrar o programa funcionando, geramos um embaralhamento curto com
+`./cubo scramble N` (N ≤ 7) e resolvemos a string gerada.
+
+---
+
+## 10. Árvore × Grafo
+
+O espaço de estados do cubo é, a rigor, um **grafo** (estados diferentes podem
+levar ao mesmo estado por caminhos diferentes — por exemplo, `R R R R` volta ao
+início). Ao explorá-lo como **árvore** a partir da raiz, esses reencontros
+viram nós repetidos em galhos distintos. Não mantemos uma tabela global de
+estados visitados (que economizaria trabalho, mas custaria muita memória); em
+vez disso usamos só a poda local de não desfazer o último movimento. Para a
+faixa de profundidade que tratamos, isso é suficiente e mantém o código simples
+e fiel à ideia de **árvore**.
+
+---
+
+## 11. Compilação e execução
+
+```bash
+make                      # compila o executável 'cubo'
+
+./cubo entrada.txt        # resolve o cubo do arquivo (até 7 movimentos)
+./cubo entrada.txt 8      # resolve permitindo até 8 movimentos
+./cubo scramble 5         # gera um cubo embaralhado com 5 giros (para testar)
+```
+
+### Exemplo de saída
+
+```
+=== Cubo Magico 3x3 - Solucionador por Arvore de Estados ===
+
+Estado inicial informado:
+        W G G
+        W W Y
+        W W Y
+...
+Busca em profundidade (aprofundamento iterativo), ate 7 movimentos:
+  procurando solucao de ate 0 movimento(s)...
+  ...
+  procurando solucao de ate 4 movimento(s)...
+
+Nos gerados na arvore: 18704
+
+=== SOLUCAO ENCONTRADA ===
+Quantidade de movimentos: 4
+
+Movimentos: B' R D' R
+
+Galho da arvore percorrido ate a solucao:
+(raiz: cubo embaralhado)
+  |_ B'   (nivel 1)
+    |_ R   (nivel 2)
+      |_ D'   (nivel 3)
+        |_ R   (nivel 4)
+          >> cubo resolvido
+```
