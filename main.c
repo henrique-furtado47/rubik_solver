@@ -111,8 +111,9 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    /* --- 1. Inicializa as tabelas de movimento --------------------------- */
+    /* --- 1. Inicializa movimentos e cores -------------------------------- */
     initMoves();
+    cubeInitCores();   /* liga as cores ANSI se a saida for um terminal        */
 
     /* Modo gerador: ./cubo scramble N  -> cria um cubo soluvel em ate N giros */
     if (strcmp(argv[1], "scramble") == 0) {
@@ -138,17 +139,18 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    printf("=== Cubo Magico 3x3 - Solucionador por Arvore de Estados ===\n\n");
-    printf("Estado inicial informado:\n");
+    printf("%s%s== Cubo Magico 3x3 - Solucionador por Arvore de Estados ==%s\n\n",
+           ansi(A_BOLD), ansi(A_CYAN), ansi(A_RESET));
+    printf("%sEstado inicial informado:%s\n\n", ansi(A_BOLD), ansi(A_RESET));
     printCube(&inicial);
-    printf("\nString: %s\n\n", inicial.f);
+    printf("\n%sString:%s %s\n\n", ansi(A_DIM), ansi(A_RESET), inicial.f);
 
     /* --- 3./4. Monta a arvore e busca a solucao -------------------------- */
-    printf("Busca em profundidade (aprofundamento iterativo), ate %d movimentos:\n",
-           profMax);
+    printf("%sBusca em profundidade (aprofundamento iterativo), ate %d movimentos:%s\n",
+           ansi(A_BOLD), profMax, ansi(A_RESET));
     solucao = resolver(&inicial, profMax, &nosVisitados);
 
-    printf("\nNos gerados na arvore: %ld\n", nosVisitados);
+    printf("\nNos gerados na arvore: %s%ld%s\n", ansi(A_BOLD), nosVisitados, ansi(A_RESET));
 
     /* --- 5. Resultado ---------------------------------------------------- */
     if (solucao == NULL) {
