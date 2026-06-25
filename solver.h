@@ -1,22 +1,36 @@
 /* ==========================================================================
- *  solver.h  -  Arvore de estados e algoritmos de busca (BFS e A*)
+ *  solver.h  -  Arvore de estados e busca em profundidade (DFS)
  * ==========================================================================
  *
- *  Aqui esta o coracao do trabalho: a ARVORE de estados do cubo.
+ *  O coracao do trabalho e a ARVORE de estados do cubo.
  *
- *  --- Estrutura Node (no da arvore) ---------------------------------------
- *  Cada no representa UM estado do cubo alcancado por uma sequencia de
- *  movimentos a partir da raiz. Ele guarda:
- *      - state    : o estado completo do cubo;
- *      - move     : o movimento que gerou este no (vindo do pai);
- *      - depth    : profundidade na arvore (numero de movimentos desde a raiz);
- *      - parent   : ponteiro para o no pai (permite reconstruir o caminho);
- *      - children : lista (vetor dinamico) de ponteiros para os filhos;
- *      - g, h, f  : custos usados pela busca A* (g=profundidade, h=heuristica).
+ *  --- A ideia da arvore ----------------------------------------------------
+ *  A RAIZ da arvore e o estado embaralhado que recebemos. A partir de um
+ *  estado podemos aplicar 12 movimentos (U U' D D' L L' R R' F F' B B'), e
+ *  cada um leva a um novo estado: sao os 12 FILHOS daquele no. Repetindo isso
+ *  formamos uma arvore que cresce a cada nivel. Resolver o cubo e encontrar,
+ *  nessa arvore, um no cujo estado esteja resolvido (todas as faces de uma
+ *  unica cor). A sequencia de movimentos da raiz ate esse no e a solucao.
  *
- *  --- Estrutura Tree -------------------------------------------------------
- *  A arvore guarda a raiz e uma lista de TODOS os nos alocados, para que o
- *  programa possa liberar a memoria (free) ao final de uma so vez.
+ *  --- Como percorremos a arvore --------------------------------------------
+ *  Usamos BUSCA EM PROFUNDIDADE (DFS) recursiva: a propria recursao desce por
+ *  um galho da arvore ate um limite de profundidade; se nao achou a solucao,
+ *  "volta" (backtracking) e tenta o proximo galho.
+ *
+ *  Para garantir a MENOR solucao possivel usamos APROFUNDAMENTO ITERATIVO:
+ *  procuramos primeiro solucoes de 0 movimentos, depois 1, depois 2, ... A
+ *  primeira que aparecer e necessariamente a mais curta.
+ *
+ *  --- Estrutura No (no da arvore) ------------------------------------------
+ *  Cada no guarda:
+ *      - estado       : o estado completo do cubo neste no;
+ *      - movimento    : o movimento (0..11) que gerou este no (-1 = raiz);
+ *      - profundidade : numero de movimentos desde a raiz;
+ *      - pai          : ponteiro para o no pai (permite remontar o caminho).
+ *
+ *  Mantemos vivos na memoria apenas os nos do galho que estamos explorando
+ *  no momento (a memoria usada e proporcional a profundidade, nao ao tamanho
+ *  total da arvore): ao desistir de um galho, liberamos seus nos.
  * ========================================================================== */
 
 #ifndef SOLVER_H
@@ -24,57 +38,39 @@
 
 #include "cube.h"
 
+/* Profundidade maxima padrao da busca (em numero de movimentos).
+ * A arvore cresce ~12x a cada nivel, entao limites altos ficam lentos.
+ * Cubos embaralhados com ate ~7 giros sao resolvidos em segundos.            */
+#define PROF_MAXIMA 7
+
 /* No da arvore de busca. */
-typedef struct Node {
-    Cube          state;        /* estado completo do cubo neste no            */
-    int           move;         /* movimento (0..11) que gerou o no; -1 = raiz */
-    int           depth;        /* profundidade (g) = movimentos desde a raiz  */
-    struct Node  *parent;       /* ponteiro para o pai                         */
-    struct Node **children;     /* vetor dinamico de filhos                    */
-    int           numChildren;  /* quantidade de filhos ja criados             */
-    int           g, h, f;      /* custos A*: f = g + h                        */
-} Node;
+typedef struct No {
+    Cube        estado;        /* estado completo do cubo neste no            */
+    int         movimento;     /* movimento (0..11) que gerou o no; -1 = raiz */
+    int         profundidade;  /* movimentos desde a raiz                     */
+    struct No  *pai;           /* ponteiro para o no pai                      */
+} No;
 
-/* A arvore: raiz + repositorio de todos os nos (para liberar no final). */
-typedef struct {
-    Node  *root;
-    Node **allNodes;    /* vetor com todos os nos alocados                     */
-    int    count;       /* quantos nos foram alocados                          */
-    int    capacity;    /* capacidade do vetor allNodes                        */
-} Tree;
+/* resolver: monta a arvore (raiz = 'inicial') e faz a busca em profundidade
+ * com aprofundamento iterativo, ate 'profMax' movimentos.
+ *
+ * Retorna o no-solucao (de onde se remonta o caminho pelos ponteiros 'pai'),
+ * ou NULL se nao houver solucao dentro de 'profMax' movimentos.
+ *
+ * 'nosVisitados' recebe quantos nos da arvore foram criados durante a busca
+ * (da uma nocao concreta de como a arvore cresce).                           */
+No *resolver(const Cube *inicial, int profMax, long *nosVisitados);
 
-/* Cria uma arvore com no raiz contendo o estado inicial 'start'. */
-Tree *createTree(const Cube *start);
+/* remontarCaminho: a partir do no-solucao, sobe pelos ponteiros 'pai' ate a
+ * raiz e preenche 'caminho' com os movimentos, na ordem da raiz ate a
+ * solucao. Retorna a quantidade de movimentos.                               */
+int remontarCaminho(No *solucao, int *caminho, int maxLen);
 
-/* Libera toda a memoria da arvore (todos os nos + estruturas internas). */
-void freeTree(Tree *tree);
+/* liberarCaminho: libera os nos do galho-solucao (da solucao ate a raiz).    */
+void liberarCaminho(No *solucao);
 
-/* generateChildren: expande 'node', criando um filho para cada movimento
- * valido (que nao gere um estado ja visitado nem desfaca o ultimo movimento).
- * Os filhos sao registrados na arvore. Retorna o numero de filhos criados.    */
-int generateChildren(Tree *tree, Node *node);
-
-/* bfsSolve: busca em LARGURA. Garante o caminho de MENOR numero de movimentos.
- * Retorna o no-solucao, ou NULL se nao encontrar dentro dos limites.          */
-Node *bfsSolve(Tree *tree, const Cube *start);
-
-/* astarSolve: busca A* (best-first) usando heuristica admissivel.
- * Tambem retorna o caminho otimo; costuma visitar menos nos que o BFS.        */
-Node *astarSolve(Tree *tree, const Cube *start);
-
-/* biBfsSolve: BFS BIDIRECIONAL. Faz duas buscas em largura simultaneas - uma
- * a partir do estado inicial e outra a partir do estado resolvido - que se
- * encontram no meio. Alcanca o DOBRO da profundidade de um BFS comum com a
- * mesma memoria. Retorna o no-folha de um ramo-solucao (cubo resolvido)
- * montado na arvore, ou NULL se nao houver encontro dentro dos limites.       */
-Node *biBfsSolve(Tree *tree, const Cube *start);
-
-/* reconstructPath: a partir do no-solucao, percorre os ponteiros 'parent'
- * ate a raiz e preenche 'path' (do raiz ao solucao). Retorna o tamanho.       */
-int reconstructPath(Node *solution, Node **path, int maxLen);
-
-/* printSolution: imprime quantidade de movimentos, a sequencia e a
- * representacao da arvore (ramo) da solucao em ASCII.                         */
-void printSolution(Node *solution);
+/* imprimirSolucao: imprime a quantidade de movimentos, a sequencia e um
+ * desenho em ASCII do galho da arvore que leva a solucao.                    */
+void imprimirSolucao(No *solucao);
 
 #endif /* SOLVER_H */
