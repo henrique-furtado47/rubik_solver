@@ -1,8 +1,0 @@
-# Cubo informado pelo usuario.
-# Ordem das faces: Cima, Esquerda, Frente, Direita, Tras, Baixo.
-W,W,W,W,W,W,W,W,W
-O,O,O,O,O,O,G,G,G
-G,G,G,G,G,G,R,R,R
-R,R,R,R,R,R,B,B,B
-B,B,B,B,B,B,O,O,O
-Y,Y,Y,Y,Y,Y,Y,Y,Y
