@@ -1,25 +1,22 @@
 # Makefile do solucionador de Cubo Magico por arvore de estados.
 #
 #   make          -> compila o executavel 'cubo'
-#   make run      -> compila e executa com entrada.txt (BFS)
-#   make astar    -> compila e executa com entrada.txt (A*)
-#   make clean    -> remove binarios e arquivos gerados
+#   make run      -> compila e executa com entrada.txt
+#   make clean    -> remove o binario
+#   make scramble -> gera um cubo embaralhado de exemplo (5 giros)
 
 CC     = gcc
 CFLAGS = -Wall -Wextra -O2
-OBJ    = main.c cube.c solver.c graphviz.c
+OBJ    = main.c cube.c solver.c
 
-cubo: $(OBJ) cube.h solver.h graphviz.h
+cubo: $(OBJ) cube.h solver.h
 	$(CC) $(CFLAGS) $(OBJ) -o cubo
 
 run: cubo
-	./cubo entrada.csv
+	./cubo entrada.txt
 
-astar: cubo
-	./cubo entrada.csv astar
-
-bidir: cubo
-	./cubo entrada.csv bidir
+scramble: cubo
+	./cubo scramble 5
 
 clean:
-	rm -f cubo test_moves check verify_tmp solution.dot saida.png
+	rm -f cubo
