@@ -238,9 +238,6 @@ void imprimirSolucao(No *solucao)
     printf("\n%sCubo resolvido:%s\n\n", ansi(A_BOLD), ansi(A_RESET));
     printCube(&solucao->estado);
 }
-
-/* ==========================================================================
- *  BUSCA GULOSA POR FASES  (fallback quando o exato nao resolve em profMax)
  * ==========================================================================
  *
  *  Ideia: se a busca exata nao acha solucao no limite, paramos de exigir a

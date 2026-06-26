@@ -174,28 +174,7 @@ int main(int argc, char *argv[])
         return 0;
     }
 
-    /* --- 6. Fallback: busca gulosa por fases ----------------------------- */
-    /* A busca exata nao achou solucao minima dentro do limite (a arvore cresce
-     * exponencialmente). Em vez de so desistir, tentamos resolver por fases:
-     * cada fase faz uma arvore de profundidade PROF_FASE e da os movimentos que
-     * deixam o cubo mais perto de resolvido. Nao garante o minimo e pode empacar. */
-    {
-        const int PROF_FASE = 7;   /* profundidade de cada fase                 */
-        const int MAX_FASES = 30;  /* teto de fases (30 x 7 = ate 210 movimentos) */
-        SolucaoGulosa sg;
-        long nosGuloso = 0;
-
-        printf("\n%sNao resolveu em ate %d movimentos exatos.%s\n",
-               ansi(A_YEL), profMax, ansi(A_RESET));
-        printf("%sTentando busca gulosa por fases (profundidade %d por fase):%s\n",
-               ansi(A_BOLD), PROF_FASE, ansi(A_RESET));
-
-        resolverGuloso(&inicial, PROF_FASE, MAX_FASES, &sg, &nosGuloso);
-
-        printf("\nNos gerados na busca gulosa: %s%ld%s\n",
-               ansi(A_BOLD), nosGuloso, ansi(A_RESET));
-
-        imprimirSolucaoGulosa(&sg);
-    }
-    return 0;
+    printf("\n%sNao foi possivel resolver em ate %d movimentos.%s\n",
+           ansi(A_YEL), profMax, ansi(A_RESET));
+    return 1;
 }
