@@ -101,7 +101,7 @@ buscaProfundidade(no, limite):
     se no.estado está resolvido:  retorne no          # achou!
     se no.profundidade == limite: retorne NULL        # não pode descer mais
     para cada movimento m (0..11):
-        se m desfaz o último movimento: pule           # poda
+        se podar(no, m): pule                          # poda (ver abaixo)
         filho = aplica m em no
         r = buscaProfundidade(filho, limite)
         se r != NULL: retorne r                        # solução neste galho
@@ -124,11 +124,41 @@ resolver(inicial, profMax):
     retorne NULL                 # não resolvível dentro de profMax
 ```
 
-### Poda
+### Poda dos galhos (`podar` em [solver.c](solver.c))
 
-A única poda é **não desfazer o movimento que acabou de ser feito** (fazer `R`
-e logo `R'` só voltaria ao nó pai). Isso reduz o fator de ramificação de 12
-para ~11 sem perder nenhuma solução.
+**Podar um galho** é decidir, *antes* de gerar um filho, que aquele movimento
+só levaria a sequências redundantes — e então nem criar esse ramo da árvore.
+Cortar perto da raiz é o que mais economiza, porque elimina **toda** a subárvore
+que cresceria embaixo (e ela cresceria ~12× por nível).
+
+Usamos três podas, todas **seguras**: para cada galho cortado existe sempre uma
+sequência igual ou mais curta que sobrevive, então **a menor solução nunca é
+perdida**.
+
+1. **Não desfazer o último movimento.** `R` seguido de `R'` só volta ao nó pai.
+   Corta o inverso do último movimento.
+2. **Faces opostas em ordem fixa.** Faces opostas **comutam** (girar `R` e `L`
+   não interfere uma na outra), então `R L` e `L R` chegam ao mesmo estado. Para
+   não explorar as duas ordens, fixamos uma: depois de uma face só permitimos a
+   face oposta se ela vier "em ordem" (número de face maior). Cada par
+   comutativo passa a aparecer **uma só vez**.
+3. **Mesma face sem repetição inútil.** Dois giros já bastam para qualquer
+   efeito numa face: (a) das duas formas de dar a meia-volta (`R R` e `R' R'`,
+   ambas iguais a girar 180°) guardamos só uma; (b) nunca giramos a mesma face
+   **3 vezes** seguidas, pois `R R R = R'` (mais curto).
+
+Por que são seguras? São todas baseadas em **equivalências de movimentos**
+(comutar faces opostas, `R R R = R'`, `R R = R' R'`). Sempre que um galho é
+cortado, a sequência equivalente — de mesmo comprimento ou menor — continua
+sendo explorada por outro galho. Logo o aprofundamento iterativo ainda encontra
+uma solução de comprimento mínimo.
+
+**Efeito.** Sozinha, a poda (1) deixava o fator de ramificação em ~11. Com (2) e
+(3) o fator efetivo cai para cerca de **9,5** movimentos por nó. Como o custo é
+exponencial na profundidade, o ganho se acumula: em 7 níveis, `(9,5/11)^7 ≈
+0,36`, ou seja, **cerca de 1/3 dos nós** — perto de **3× menos trabalho** que
+antes, sem mudar a estrutura (continua sendo uma árvore comum, só com galhos
+podados). Os números exatos aparecem na execução, em "Nos gerados na arvore".
 
 ---
 
@@ -158,11 +188,13 @@ limite e o programa avisa.
 
 ## 8. Complexidade
 
-Seja `b` o fator de ramificação (~11 após a poda) e `d` a profundidade da
-solução.
+Seja `b` o fator de ramificação (~9,5 após as três podas) e `d` a profundidade
+da solução.
 
-- **Tempo:** O(b^d). A árvore cresce ~12× por nível. Medições reais: ~18 mil
-  nós para d=4; ~25 milhões para d=7.
+- **Tempo:** O(b^d). Sem poda a árvore cresceria 12× por nível; as podas baixam
+  esse fator efetivo para ~9,5. O número de nós realmente gerados é impresso em
+  "Nos gerados na arvore" ao final da execução — rode `make run` para conferir o
+  valor exato na sua máquina.
 - **Memória:** O(d). Como liberamos cada galho ao desistir dele, só ficam vivos
   os nós do caminho atual — proporcional à **profundidade**, não ao tamanho da
   árvore. Essa é a grande vantagem da DFS sobre a busca em largura aqui.
@@ -198,10 +230,11 @@ O espaço de estados do cubo é, a rigor, um **grafo** (estados diferentes podem
 levar ao mesmo estado por caminhos diferentes — por exemplo, `R R R R` volta ao
 início). Ao explorá-lo como **árvore** a partir da raiz, esses reencontros
 viram nós repetidos em galhos distintos. Não mantemos uma tabela global de
-estados visitados (que economizaria trabalho, mas custaria muita memória); em
-vez disso usamos só a poda local de não desfazer o último movimento. Para a
-faixa de profundidade que tratamos, isso é suficiente e mantém o código simples
-e fiel à ideia de **árvore**.
+estados visitados (que economizaria trabalho, mas custaria muita memória e
+fugiria de uma "árvore comum"); em vez disso usamos podas **locais** (seção 5),
+que olham só os últimos movimentos do galho atual. Para a faixa de profundidade
+que tratamos, isso é suficiente e mantém o código simples e fiel à ideia de
+**árvore**.
 
 ---
 
@@ -216,6 +249,10 @@ make                      # compila o executável 'cubo'
 ```
 
 ### Exemplo de saída
+
+> *Ilustrativo.* O número de "Nos gerados" e a sequência exata da solução podem
+> variar conforme a poda e a ordem de exploração; o que está garantido é a
+> **quantidade mínima** de movimentos.
 
 ```
 === Cubo Magico 3x3 - Solucionador por Arvore de Estados ===

@@ -74,14 +74,21 @@ Estado invalido do cubo.
   (*backtracking*) e tenta o próximo movimento.
 - **Aprofundamento iterativo**: repetimos a DFS com limite 0, 1, 2, … A
   primeira solução encontrada é a **mais curta** (menor número de movimentos).
+- **Poda de galhos**: antes de gerar um filho, descartamos movimentos que só
+  levariam a sequências redundantes — (1) não desfazer o último movimento,
+  (2) fixar uma ordem para faces opostas (que comutam) e (3) não repetir a mesma
+  face além de dois giros. Todas são seguras (não perdem a solução mínima) e
+  baixam o fator de ramificação de ~12 para ~9,5, gerando cerca de **3× menos
+  nós** em 7 movimentos.
 - **Memória**: ficam vivos apenas os nós do galho atual — proporcional à
   profundidade, não ao tamanho total da árvore.
 
 ## Limite (importante para a apresentação)
 
-A árvore cresce **cerca de 12× por nível**. Em 7 movimentos já são ~25 milhões
-de estados; em 20 movimentos seria ~10²², inviável. Por isso a busca em árvore
-resolve apenas cubos **pouco embaralhados** (até ~7 giros em segundos). Um cubo
+A árvore cresce muito por nível (sem poda, 12×; com as podas, ~9,5×). Em 7
+movimentos ainda são milhões de estados; em 20 movimentos seria ~10¹⁹, inviável.
+Por isso a busca em árvore resolve apenas cubos **pouco embaralhados** (até ~7
+giros em segundos). Um cubo
 totalmente embaralhado (que pode exigir até 20 movimentos) **não** é resolvido
 por essa abordagem — o programa avisa isso de forma clara em vez de travar.
 
