@@ -238,9 +238,6 @@ void imprimirSolucao(No *solucao)
     printf("\n%sCubo resolvido:%s\n\n", ansi(A_BOLD), ansi(A_RESET));
     printCube(&solucao->estado);
 }
- * ==========================================================================
- *
- *  Ideia: se a busca exata nao acha solucao no limite, paramos de exigir a
  *  solucao MINIMA e passamos a fazer PROGRESSO por fases:
  *
  *    1. A partir do estado atual, montamos uma arvore de profundidade 'profFase'
