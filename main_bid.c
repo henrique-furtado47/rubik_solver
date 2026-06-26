@@ -12,8 +12,9 @@
  *      make            -> gera 'cubo' (Codigo 1) e 'cubo_bid' (Codigo 2)
  *
  *  Execucao:
- *      ./cubo_bid entrada.txt                 frente=6, tras=6  (ate 12 mov.)
- *      ./cubo_bid entrada.txt 7 5             frente=7, tras=5  (menos memoria)
+ *      ./cubo_bid entrada.txt                 padrao: resolve ate 12 movimentos
+ *      ./cubo_bid entrada.txt 15              total = 15; split automatico (8+7)
+ *      ./cubo_bid entrada.txt 8 7             controla frente e tras na mao
  * ========================================================================== */
 
 #include <stdio.h>
@@ -53,25 +54,51 @@ static int lerEntrada(const char *caminho, char *dest)
     return n;
 }
 
+/* escolheSplit: dado o TOTAL de movimentos desejado, divide entre frente e tras
+ * de forma equilibrada. A profundidade de tras controla a MEMORIA da BST (cresce
+ * exponencialmente), entao a limitamos a TRAS_MAX; o resto vai para a frente
+ * (que custa tempo, nao memoria).                                             */
+static void escolheSplit(int total, int *frente, int *tras)
+{
+    const int TRAS_MAX = 7;        /* tras=7 ~ 1 GB de BST; acima disso estoura */
+    int t = total / 2;             /* metade para tras (o lado que come memoria) */
+
+    if (t > TRAS_MAX) t = TRAS_MAX;
+    if (t < 1)        t = 1;
+    *tras   = t;
+    *frente = total - t;
+    if (*frente < 1) *frente = 1;
+}
+
 int main(int argc, char *argv[])
 {
     char       entrada[128];
     Cube       inicial;
     SolucaoBid sol;
-    int        profFrente = 6, profTras = 6;   /* metade para cada lado         */
+    int        profFrente, profTras;
 
     if (argc < 2) {
         printf("Uso:\n");
-        printf("  %s <arquivo_entrada> [profFrente] [profTras]\n", argv[0]);
-        printf("  (padrao: frente=6, tras=6 -> resolve ate 12 movimentos)\n");
+        printf("  %s <arquivo_entrada> [total]            split automatico\n", argv[0]);
+        printf("  %s <arquivo_entrada> <frente> <tras>    split manual\n", argv[0]);
+        printf("  (sem numero: resolve ate 12 movimentos)\n");
         return 1;
     }
 
     initMoves();
     cubeInitCores();
 
-    if (argc >= 3) { int p = atoi(argv[2]); if (p > 0) profFrente = p; }
-    if (argc >= 4) { int p = atoi(argv[3]); if (p > 0) profTras   = p; }
+    /* Argumentos: 1 numero = TOTAL (split automatico); 2 numeros = frente e tras. */
+    if (argc >= 4) {
+        profFrente = atoi(argv[2]);
+        profTras   = atoi(argv[3]);
+        if (profFrente < 1) profFrente = 6;
+        if (profTras   < 1) profTras   = 6;
+    } else {
+        int total = (argc >= 3) ? atoi(argv[2]) : 12;
+        if (total < 2) total = 2;
+        escolheSplit(total, &profFrente, &profTras);
+    }
 
     if (lerEntrada(argv[1], entrada) < 0)
         return 1;
@@ -91,6 +118,9 @@ int main(int argc, char *argv[])
     printf("%sBusca bidirecional: frente ate %d e tras ate %d "
            "(solucao de ate %d movimentos)%s\n",
            ansi(A_BOLD), profFrente, profTras, profFrente + profTras, ansi(A_RESET));
+    if (profTras >= 7)
+        printf("  %s(aviso: tras=%d usa muita memoria, ~1 GB ou mais)%s\n",
+               ansi(A_YEL), profTras, ansi(A_RESET));
     printf("  construindo a arvore de tras na BST e procurando o encontro...\n");
 
     resolverBidirecional(&inicial, profFrente, profTras, &sol);

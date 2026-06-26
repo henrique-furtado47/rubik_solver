@@ -51,10 +51,15 @@ gcc main_bid.c cube.c solver_bid.c bst.c -o cubo_bid
 ./cubo entrada.txt 8      # permite até 8 movimentos
 ./cubo scramble 5         # gera um cubo embaralhado com 5 giros (para testar)
 
-# Código 2 (bidirecional + BST; até ~12 movimentos)
-./cubo_bid entrada.txt    # frente=6, tras=6
-./cubo_bid entrada.txt 7 5  # frente=7, tras=5 (usa menos memória)
+# Código 2 (bidirecional + BST; até ~12-15 movimentos)
+./cubo_bid entrada.txt      # padrão: resolve até 12 movimentos
+./cubo_bid entrada.txt 15   # informa o TOTAL; o programa divide sozinho (8+7)
+./cubo_bid entrada.txt 8 7  # split manual (frente=8, trás=7), se quiser controlar
 ```
+
+No Código 2, **trás** controla a memória (a BST guarda aquele lado) e **frente**
+controla o tempo. Passando só o total, ele equilibra os dois automaticamente
+(limitando o trás para a memória não estourar).
 
 Também aceita entrada redirecionada:
 

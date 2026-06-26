@@ -148,6 +148,11 @@ técnicas adicionais (tabelas de padrões etc.), que fogem do escopo de árvores
 ```bash
 make                       # compila 'cubo' (Codigo 1) e 'cubo_bid' (Codigo 2)
 
-./cubo_bid entrada.txt     # frente=6, tras=6  -> resolve ate 12 movimentos
-./cubo_bid entrada.txt 7 5 # frente=7, tras=5  -> usa menos memoria
+./cubo_bid entrada.txt     # padrao: resolve ate 12 movimentos
+./cubo_bid entrada.txt 15  # informa o TOTAL; o programa divide em 8 + 7 sozinho
+./cubo_bid entrada.txt 8 7 # split manual (frente, tras)
 ```
+
+Passando só o **total**, o programa escolhe o split: dá metade para o lado de
+trás (limitada a 7, para a memória da BST não estourar) e o resto para a frente.
+Assim `12` vira 6+6, `13` vira 7+6, `14` vira 7+7 e `15` vira 8+7.
