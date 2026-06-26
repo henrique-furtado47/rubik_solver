@@ -49,17 +49,32 @@ static void gerarScramble(int n)
     initCube(&c, RESOLVIDO);
     srand((unsigned) time(NULL));
 
-    printf("Embaralhando o cubo resolvido com %d movimento(s):\n  ", n);
+    printf("%s%s== Cubo Magico 3x3 - Gerador de Embaralhamento ==%s\n\n",
+           ansi(A_BOLD), ansi(A_CYAN), ansi(A_RESET));
+
+    printf("%sCubo resolvido (ponto de partida):%s\n\n", ansi(A_BOLD), ansi(A_RESET));
+    printCube(&c);
+
+    printf("\n%sEmbaralhando com %s%d%s%s movimento(s):%s\n  ",
+           ansi(A_BOLD), ansi(A_CYAN), n, ansi(A_RESET), ansi(A_BOLD), ansi(A_RESET));
+    printf("%s%s", ansi(A_BOLD), ansi(A_CYAN));
     for (i = 0; i < n; i++) {
         int m;
         do {
             m = rand() % NUM_MOVES;
         } while (ultimo != -1 && m == inverseMove(ultimo));  /* nao desfaz     */
         applyMove(&c, &c, m);
-        printf("%s ", MOVE_NAMES[m]);
+        printf("%s%s", MOVE_NAMES[m], (i < n - 1) ? " " : "");
         ultimo = m;
     }
-    printf("\n\nString gerada (cole em um arquivo e resolva com ./cubo):\n%s\n", c.f);
+    printf("%s\n", ansi(A_RESET));
+
+    printf("\n%sCubo embaralhado:%s\n\n", ansi(A_BOLD), ansi(A_RESET));
+    printCube(&c);
+
+    printf("\n%sString gerada%s (cole num arquivo e resolva com %s./cubo arquivo%s):\n",
+           ansi(A_DIM), ansi(A_RESET), ansi(A_CYAN), ansi(A_RESET));
+    printf("%s%s%s\n", ansi(A_GREEN), c.f, ansi(A_RESET));
 }
 
 /* lerEntrada: le o arquivo e extrai ate 54 caracteres de cor. Ignora espacos,

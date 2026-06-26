@@ -25,6 +25,57 @@
  * Logo o inverso de um indice par e o seguinte, e o de um impar e o anterior. */
 static int movimentoInverso(int m) { return (m % 2 == 0) ? m + 1 : m - 1; }
 
+/* faceDe / eixoDe: a partir do indice do movimento (0..11) descobrimos a face
+ * e o eixo. A ordem dos movimentos e U U' D D' L L' R R' F F' B B', logo:
+ *   - face = m/2  ->  0=U 1=D 2=L 3=R 4=F 5=B
+ *   - eixo = m/4  ->  0=U/D 1=L/R 2=F/B   (faces opostas tem o mesmo eixo)      */
+static int faceDe(int m) { return m / 2; }
+static int eixoDe(int m) { return m / 4; }
+
+/* --------------------------------------------------------------------------
+ *  podar: decide se NAO vale a pena gerar o filho do movimento 'm' a partir
+ *  do no 'no'. Todas as regras abaixo sao SEGURAS: elas so cortam galhos que
+ *  levam a sequencias redundantes (existe sempre outra sequencia igual ou mais
+ *  curta que sobrevive). Logo a menor solucao nunca e perdida.
+ *
+ *  Retorna 1 para podar (pular o movimento) ou 0 para gera-lo.
+ * -------------------------------------------------------------------------- */
+static int podar(const No *no, int m)
+{
+    int ultimo = no->movimento;
+
+    if (ultimo == -1)
+        return 0;                       /* raiz: nada antes, nada a podar       */
+
+    /* (1) Nao desfazer o ultimo movimento: R seguido de R' so volta ao pai.    */
+    if (m == movimentoInverso(ultimo))
+        return 1;
+
+    /* (2) Faces opostas COMUTAM (ex.: R e L nao se atrapalham), entao "R L" e
+     *     "L R" levam ao mesmo estado. Para nao explorar as duas ordens,
+     *     fixamos uma: depois de uma face, so permitimos a face oposta se ela
+     *     vier "em ordem" (numero maior). Assim cada par comutativo aparece
+     *     uma unica vez.                                                        */
+    if (eixoDe(m) == eixoDe(ultimo) && faceDe(m) != faceDe(ultimo)
+        && faceDe(m) < faceDe(ultimo))
+        return 1;
+
+    /* (3) Mesma face em sequencia: dois giros bastam para qualquer efeito.
+     *     - 3a) Das duas formas de dar meia-volta (R R e R' R'), guardamos so
+     *           uma: se o ultimo foi anti-horario, nao repetimos a face (o caso
+     *           horario-horario ja cobre a meia-volta).
+     *     - 3b) Nunca a mesma face 3x seguidas: R R R = R' (mais curto).        */
+    if (faceDe(m) == faceDe(ultimo)) {
+        if (ultimo % 2 == 1)            /* 3a: evita R' R' (duplicata de R R)    */
+            return 1;
+        if (no->pai != NULL && no->pai->movimento != -1
+            && faceDe(no->pai->movimento) == faceDe(ultimo))
+            return 1;                   /* 3b: terceira repeticao da mesma face  */
+    }
+
+    return 0;
+}
+
 /* criarNo: aloca um no da arvore com o estado e os dados informados. */
 static No *criarNo(const Cube *estado, int movimento, int profundidade, No *pai)
 {
@@ -60,9 +111,10 @@ static No *buscaProfundidade(No *no, int limite, long *nosVisitados)
         Cube  filhoEstado;
         No   *filho, *resultado;
 
-        /* Poda simples: nao desfazer logo o movimento que acabou de ser feito
-         * (ex.: fazer R e em seguida R' so nos traria de volta ao no pai).    */
-        if (no->movimento != -1 && m == movimentoInverso(no->movimento))
+        /* Poda dos galhos redundantes (ver podar()): nao desfazer o ultimo
+         * movimento, fixar a ordem de faces opostas e nao repetir a mesma
+         * face alem do necessario. Nenhuma delas perde a solucao mais curta.   */
+        if (podar(no, m))
             continue;
 
         applyMove(&filhoEstado, &no->estado, m);
