@@ -6,31 +6,54 @@ filhos, um por movimento) e a percorre por **busca em profundidade recursiva
 com aprofundamento iterativo**, encontrando a **menor** sequência de movimentos
 que resolve o cubo.
 
+## Duas versões
+
+São dois programas que compartilham o mesmo modelo do cubo:
+
+| | Executável | Estrutura | Alcance |
+|---|---|---|---|
+| **Código 1** | `cubo` | uma árvore de estados (DFS + poda) e, como reserva, uma busca gulosa por fases | resolve **mínimo** até ~7-8 movimentos |
+| **Código 2** | `cubo_bid` | **duas** árvores que se encontram no meio + uma **Árvore Binária de Busca (BST)** para casar os estados | resolve **mínimo** até ~12 movimentos |
+
+O Código 1 mostra a árvore de busca clássica e seu limite prático; o Código 2
+mostra como **duas árvores curtas + uma BST** vencem a explosão exponencial.
+Detalhes do Código 2 em [RELATORIO_BIDIRECIONAL.md](RELATORIO_BIDIRECIONAL.md).
+
 ## Arquivos
 
 ```
-cube.h / cube.c       -> representação do cubo (54 adesivos) e os 12 movimentos
-solver.h / solver.c   -> a árvore (struct No) e a busca em profundidade (DFS)
-main.c                -> programa principal (leitura, validação, impressão)
-entrada.txt           -> exemplo de entrada (cubo embaralhado em 4 giros)
-Makefile              -> compilação
-RELATORIO.md          -> relatório técnico completo
+cube.h / cube.c           -> representação do cubo (54 adesivos) e os 12 movimentos
+solver.h / solver.c       -> Código 1: a árvore (struct No), DFS e a busca gulosa
+main.c                    -> Código 1: programa principal
+bst.h / bst.c             -> Código 2: a Árvore Binária de Busca de estados
+solver_bid.h / solver_bid.c -> Código 2: a busca bidirecional (encontro no meio)
+main_bid.c                -> Código 2: programa principal
+entrada.txt               -> exemplo de entrada
+Makefile                  -> compilação dos dois executáveis
+RELATORIO.md              -> relatório do Código 1
+RELATORIO_BIDIRECIONAL.md -> relatório do Código 2 (bidirecional + BST)
 ```
 
 ## Compilação
 
 ```bash
-make
+make                # compila os dois: 'cubo' e 'cubo_bid'
 # ou, diretamente:
 gcc main.c cube.c solver.c -o cubo
+gcc main_bid.c cube.c solver_bid.c bst.c -o cubo_bid
 ```
 
 ## Execução
 
 ```bash
-./cubo entrada.txt        # resolve o cubo do arquivo (até 7 movimentos)
-./cubo entrada.txt 8      # resolve permitindo até 8 movimentos
+# Código 1 (uma árvore; até ~7-8 movimentos)
+./cubo entrada.txt        # resolve o cubo do arquivo
+./cubo entrada.txt 8      # permite até 8 movimentos
 ./cubo scramble 5         # gera um cubo embaralhado com 5 giros (para testar)
+
+# Código 2 (bidirecional + BST; até ~12 movimentos)
+./cubo_bid entrada.txt    # frente=6, tras=6
+./cubo_bid entrada.txt 7 5  # frente=7, tras=5 (usa menos memória)
 ```
 
 Também aceita entrada redirecionada:
@@ -98,6 +121,19 @@ Para demonstrar, gere um embaralhamento curto e resolva:
 ./cubo scramble 5   # mostra os giros e a string gerada
 # copie a string para um arquivo e rode ./cubo nesse arquivo
 ```
+
+### Plano B: busca gulosa por fases
+
+Se o cubo **não** couber no limite exato, o programa não desiste: entra numa
+**busca gulosa por fases**. Cada fase monta uma árvore de profundidade 7 e dá os
+movimentos que deixam o cubo **mais perto de resolvido** (medido por quantos
+adesivos já estão na cor do próprio centro), tratando o resultado como uma nova
+raiz e repetindo. Continua sendo **só árvore** + uma função de avaliação.
+
+Em troca de alcançar cubos mais embaralhados, ela **abre mão da solução mínima**
+e **pode empacar num ótimo local** (a heurística é enganosa — às vezes é preciso
+piorar para depois resolver). Quando empaca, o programa informa o melhor estado
+alcançado, em %. Detalhes na seção 9.1 do [RELATORIO.md](RELATORIO.md).
 
 ## Detalhes técnicos
 

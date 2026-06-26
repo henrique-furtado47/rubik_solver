@@ -18,6 +18,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include "solver.h"
 
 /* movimentoInverso: indice do movimento que desfaz 'm'.
@@ -40,12 +41,10 @@ static int eixoDe(int m) { return m / 4; }
  *
  *  Retorna 1 para podar (pular o movimento) ou 0 para gera-lo.
  * -------------------------------------------------------------------------- */
-static int podar(const No *no, int m)
+static int podarMov(int ultimo, int penultimo, int m)
 {
-    int ultimo = no->movimento;
-
     if (ultimo == -1)
-        return 0;                       /* raiz: nada antes, nada a podar       */
+        return 0;                       /* nada antes: nada a podar             */
 
     /* (1) Nao desfazer o ultimo movimento: R seguido de R' so volta ao pai.    */
     if (m == movimentoInverso(ultimo))
@@ -68,12 +67,19 @@ static int podar(const No *no, int m)
     if (faceDe(m) == faceDe(ultimo)) {
         if (ultimo % 2 == 1)            /* 3a: evita R' R' (duplicata de R R)    */
             return 1;
-        if (no->pai != NULL && no->pai->movimento != -1
-            && faceDe(no->pai->movimento) == faceDe(ultimo))
+        if (penultimo != -1 && faceDe(penultimo) == faceDe(ultimo))
             return 1;                   /* 3b: terceira repeticao da mesma face  */
     }
 
     return 0;
+}
+
+/* podar: versao para a arvore exata (extrai ultimo/penultimo dos ponteiros). */
+static int podar(const No *no, int m)
+{
+    int ultimo    = no->movimento;
+    int penultimo = (no->pai != NULL) ? no->pai->movimento : -1;
+    return podarMov(ultimo, penultimo, m);
 }
 
 /* criarNo: aloca um no da arvore com o estado e os dados informados. */
@@ -231,4 +237,166 @@ void imprimirSolucao(No *solucao)
     /* Confirmacao visual: o cubo apos aplicar a solucao (deve estar resolvido). */
     printf("\n%sCubo resolvido:%s\n\n", ansi(A_BOLD), ansi(A_RESET));
     printCube(&solucao->estado);
+}
+
+/* ==========================================================================
+ *  BUSCA GULOSA POR FASES  (fallback quando o exato nao resolve em profMax)
+ * ==========================================================================
+ *
+ *  Ideia: se a busca exata nao acha solucao no limite, paramos de exigir a
+ *  solucao MINIMA e passamos a fazer PROGRESSO por fases:
+ *
+ *    1. A partir do estado atual, montamos uma arvore de profundidade 'profFase'
+ *       (ex.: 7) e procuramos a FOLHA mais proxima de resolvida -- isto e, a que
+ *       tem o maior numero de adesivos na cor do proprio centro (heuristica).
+ *    2. Aplicamos os movimentos ate essa folha. Agora o cubo esta "mais perto".
+ *    3. Tratamos esse novo estado como uma raiz nova e repetimos.
+ *
+ *  E uma arvore comum por fase + uma funcao de avaliacao + um laco. NAO garante
+ *  a solucao minima e PODE empacar num "otimo local" (um ponto em que nenhuma
+ *  sequencia de 'profFase' movimentos melhora a contagem). Nesses casos o
+ *  programa reporta honestamente ate onde chegou.
+ * ========================================================================== */
+
+/* adesivosCorretos: heuristica "quao perto de resolvido". Conta quantos dos 54
+ * adesivos ja estao na cor do centro da propria face (54 = cubo resolvido).    */
+static int adesivosCorretos(const Cube *c)
+{
+    static const int offs[6] = { U_OFF, L_OFF, F_OFF, R_OFF, B_OFF, D_OFF };
+    int face, i, n = 0;
+
+    for (face = 0; face < 6; face++) {
+        char centro = c->f[offs[face] + 4];
+        for (i = 0; i < 9; i++)
+            if (c->f[offs[face] + i] == centro)
+                n++;
+    }
+    return n;
+}
+
+/* Estado de trabalho de UMA fase da busca gulosa. */
+typedef struct {
+    int melhorScore;      /* maior numero de adesivos certos visto na fase     */
+    int len;              /* comprimento do caminho ate esse melhor estado     */
+    int caminho[16];      /* movimentos ate o melhor estado (<= profFase)      */
+    int atual[16];        /* movimentos do galho que esta sendo explorado      */
+} Fase;
+
+/* buscaFase: DFS ate 'limite' movimentos guardando a folha de maior pontuacao.
+ * E a mesma arvore de antes, mas em vez de parar no cubo resolvido, ela mede
+ * cada no pela heuristica e memoriza o melhor. Memoria O(limite) (recursao).
+ *
+ * Empate: se a pontuacao apenas igual a melhor ja vista e a melhor era a raiz
+ * (len 0), aceitamos um caminho de mesmo valor para tentar atravessar "platos".*/
+static void buscaFase(const Cube *estado, int prof, int limite,
+                      int ultimo, int penultimo, Fase *f, long *nos)
+{
+    int s = adesivosCorretos(estado);
+    int m;
+
+    if (s > f->melhorScore || (s == f->melhorScore && f->len == 0 && prof > 0)) {
+        f->melhorScore = s;
+        f->len = prof;
+        if (prof > 0)
+            memcpy(f->caminho, f->atual, (size_t) prof * sizeof(int));
+    }
+
+    if (s == NUM_FACELETS) return;       /* resolvido: nao precisa descer mais  */
+    if (prof >= limite) return;          /* atingiu a profundidade da fase      */
+
+    for (m = 0; m < NUM_MOVES; m++) {
+        Cube filho;
+        if (podarMov(ultimo, penultimo, m))
+            continue;
+        applyMove(&filho, estado, m);
+        f->atual[prof] = m;
+        (*nos)++;
+        buscaFase(&filho, prof + 1, limite, m, ultimo, f, nos);
+        if (f->melhorScore == NUM_FACELETS)
+            return;                      /* ja achou o cubo resolvido           */
+    }
+}
+
+/* resolverGuloso: roda fases ate resolver, empacar ou estourar 'maxFases'.
+ * Retorna 1 se resolveu, 0 caso contrario, preenchendo 'out'.                  */
+int resolverGuloso(const Cube *inicial, int profFase, int maxFases,
+                   SolucaoGulosa *out, long *nosVisitados)
+{
+    Cube cur;
+    int  total = 0, semProgresso = 0, fase;
+    const int PLATO_MAX = 5;             /* fases seguidas sem ganho antes de desistir */
+
+    copyCube(&cur, inicial);
+    *nosVisitados = 0;
+
+    for (fase = 0; fase < maxFases; fase++) {
+        Fase f;
+        int  scoreAntes = adesivosCorretos(&cur), i;
+
+        if (scoreAntes == NUM_FACELETS)
+            break;                       /* ja esta resolvido                   */
+
+        f.melhorScore = -1;
+        f.len = 0;
+        buscaFase(&cur, 0, profFase, -1, -1, &f, nosVisitados);
+
+        printf("  fase %s%d%s: melhor estado = %s%d/%d%s adesivos certos (%d%%)\n",
+               ansi(A_BOLD), fase + 1, ansi(A_RESET),
+               ansi(A_BOLD), f.melhorScore, NUM_FACELETS, ansi(A_RESET),
+               (f.melhorScore * 100) / NUM_FACELETS);
+
+        if (f.len == 0)
+            break;                       /* nenhum movimento melhora: pico/otimo local */
+
+        if (f.melhorScore <= scoreAntes) {
+            if (++semProgresso > PLATO_MAX)
+                break;                   /* preso num plato: desiste            */
+        } else {
+            semProgresso = 0;
+        }
+
+        for (i = 0; i < f.len && total < MAX_MOV_GULOSO; i++) {
+            applyMove(&cur, &cur, f.caminho[i]);
+            out->caminho[total++] = f.caminho[i];
+        }
+
+        if (isSolved(&cur))
+            break;
+    }
+
+    out->qtd       = total;
+    out->resolvido = isSolved(&cur);
+    out->pct       = (adesivosCorretos(&cur) * 100) / NUM_FACELETS;
+    copyCube(&out->estadoFinal, &cur);
+    return out->resolvido;
+}
+
+/* imprimirSolucaoGulosa: mostra o resultado da busca por fases. */
+void imprimirSolucaoGulosa(const SolucaoGulosa *s)
+{
+    int i;
+
+    if (s->resolvido) {
+        printf("\n%s%s== SOLUCAO ENCONTRADA (busca gulosa por fases) ==%s\n",
+               ansi(A_BOLD), ansi(A_GREEN), ansi(A_RESET));
+        printf("Quantidade de movimentos: %s%d%s %s(nao necessariamente minima)%s\n\n",
+               ansi(A_BOLD), s->qtd, ansi(A_RESET), ansi(A_DIM), ansi(A_RESET));
+    } else {
+        printf("\n%s%s== NAO RESOLVIDO (a busca gulosa empacou) ==%s\n",
+               ansi(A_BOLD), ansi(A_YEL), ansi(A_RESET));
+        printf("Cheguei a %s%d%%%s de adesivos certos em %s%d%s movimento(s); a partir\n",
+               ansi(A_BOLD), s->pct, ansi(A_RESET), ansi(A_BOLD), s->qtd, ansi(A_RESET));
+        printf("daqui nenhuma sequencia curta melhora (otimo local da heuristica).\n\n");
+    }
+
+    if (s->qtd > 0) {
+        printf("Movimentos: %s%s", ansi(A_BOLD), ansi(A_CYAN));
+        for (i = 0; i < s->qtd; i++)
+            printf("%s%s", MOVE_NAMES[s->caminho[i]], (i < s->qtd - 1) ? " " : "");
+        printf("%s\n", ansi(A_RESET));
+    }
+
+    printf("\n%s%s:%s\n\n", ansi(A_BOLD),
+           s->resolvido ? "Cubo resolvido" : "Melhor estado alcancado", ansi(A_RESET));
+    printCube(&s->estadoFinal);
 }

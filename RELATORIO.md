@@ -224,6 +224,42 @@ Para demonstrar o programa funcionando, geramos um embaralhamento curto com
 
 ---
 
+## 9.1. Plano B: busca gulosa por fases
+
+Quando a busca exata **não** resolve dentro do limite, em vez de só desistir o
+programa tenta uma **busca gulosa por fases** (`resolverGuloso` em
+[solver.c](solver.c)). A ideia abre mão da solução mínima em troca de conseguir
+fazer **progresso** em cubos mais embaralhados:
+
+1. A partir do estado atual, montamos **uma árvore comum** de profundidade
+   `PROF_FASE` (= 7) e, em vez de procurar o cubo resolvido, procuramos a
+   **folha mais próxima de resolvida**. A proximidade é medida por uma
+   **heurística** simples — `adesivosCorretos()`, que conta quantos dos 54
+   adesivos já estão na cor do centro da própria face (54 = resolvido).
+2. Aplicamos os movimentos até essa folha. O cubo fica "mais perto".
+3. Tratamos o novo estado como uma **raiz nova** e repetimos a fase.
+
+É a **mesma estrutura de antes** — uma árvore por fase, percorrida em
+profundidade, com a poda da seção 5 — só que guiada por uma função de avaliação.
+Não há estrutura nova nem grafo: continua sendo árvore.
+
+**Limitações (assumidas honestamente):**
+
+- A solução **não é mínima** (sai em múltiplos de até `PROF_FASE` movimentos).
+- A heurística "adesivos certos" é **enganosa** no cubo: às vezes é preciso
+  *piorar* temporariamente para depois resolver. Por isso a busca gulosa pode
+  **empacar num ótimo local** — um ponto em que nenhuma sequência de 7
+  movimentos melhora a contagem. Quando isso acontece (após algumas fases sem
+  ganho), o programa para e **reporta o melhor estado alcançado** (em %), em vez
+  de rodar para sempre. Olhar 7 movimentos à frente torna a busca bem mais
+  robusta que uma gulosa de 1 movimento, mas não elimina os ótimos locais.
+
+Ou seja: a busca exata continua sendo o coração do trabalho (e dá a solução
+mínima quando cabe); a gulosa é um complemento que estende o alcance, deixando
+claro o que ganha (profundidade) e o que perde (otimalidade e garantia).
+
+---
+
 ## 10. Árvore × Grafo
 
 O espaço de estados do cubo é, a rigor, um **grafo** (estados diferentes podem

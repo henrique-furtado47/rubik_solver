@@ -73,4 +73,33 @@ void liberarCaminho(No *solucao);
  * desenho em ASCII do galho da arvore que leva a solucao.                    */
 void imprimirSolucao(No *solucao);
 
+/* --------------------------------------------------------------------------
+ *  Busca gulosa por fases (fallback quando o exato nao resolve em profMax)
+ *  --------------------------------------------------------------------------
+ *  Quando o cubo nao cabe no limite da busca exata, repetimos fases: em cada
+ *  fase montamos uma arvore de profundidade 'profFase' e damos os movimentos
+ *  que deixam o cubo MAIS PERTO de resolvido (maior numero de adesivos certos),
+ *  tratando o estado resultante como uma nova raiz. NAO garante solucao minima
+ *  e pode parar num "otimo local" sem resolver -- nesse caso reporta o melhor
+ *  estado alcancado.
+ * -------------------------------------------------------------------------- */
+#define MAX_MOV_GULOSO 256
+
+typedef struct {
+    int  caminho[MAX_MOV_GULOSO];  /* sequencia total de movimentos            */
+    int  qtd;                      /* quantos movimentos foram dados           */
+    int  resolvido;                /* 1 se chegou a 100%, 0 se empacou         */
+    int  pct;                      /* % de adesivos certos no estado final     */
+    Cube estadoFinal;              /* cubo apos aplicar a sequencia            */
+} SolucaoGulosa;
+
+/* resolverGuloso: tenta resolver por fases (cada fase = uma arvore de
+ * profundidade 'profFase'), ate 'maxFases' fases. Retorna 1 se resolveu e
+ * preenche 'out'. 'nosVisitados' recebe o total de nos gerados.               */
+int resolverGuloso(const Cube *inicial, int profFase, int maxFases,
+                   SolucaoGulosa *out, long *nosVisitados);
+
+/* imprimirSolucaoGulosa: imprime o resultado da busca por fases.             */
+void imprimirSolucaoGulosa(const SolucaoGulosa *s);
+
 #endif /* SOLVER_H */
